@@ -54,7 +54,21 @@ add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 # ---- Application executable (skeleton; expands in later tasks) ----
 add_executable(actuation_freertos_s32z2
     freertos_main.cpp
+    board_init.c
+    startup.S
 )
+
+target_link_options(actuation_freertos_s32z2 PRIVATE
+    -T${CMAKE_CURRENT_SOURCE_DIR}/linker.ld
+)
+
+# Pull in RTD driver objects (Mcu, Port, Platform). The engineer must add
+# explicit paths once the RTD layout is known. Reference template:
+# file(GLOB _rtd_drivers
+#     ${S32_RTD_PATH}/MCAL/Mcu_TS_T40D34M40I0R0/src/Mcu*.c
+#     ${S32_RTD_PATH}/MCAL/Port_TS_T40D34M40I0R0/src/Port*.c
+#     ${S32_RTD_PATH}/MCAL/Platform_TS_T40D34M40I0R0/src/Platform*.c)
+# target_sources(actuation_freertos_s32z2 PRIVATE ${_rtd_drivers})
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${CMAKE_SOURCE_DIR}/../include
