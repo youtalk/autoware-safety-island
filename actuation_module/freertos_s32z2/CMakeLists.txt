@@ -78,3 +78,21 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
 )
 
 set_target_properties(actuation_freertos_s32z2 PROPERTIES SUFFIX ".elf")
+
+file(GLOB _freertos_core
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../tasks.c
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../queue.c
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../list.c
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../timers.c
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../event_groups.c
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../stream_buffer.c
+    ${S32Z2_FREERTOS_KERNEL_DIR}/../portable/MemMang/heap_4.c
+)
+target_sources(actuation_freertos_s32z2 PRIVATE
+    ${_freertos_core}
+    ${S32Z2_FREERTOS_PORT_DIR}/port.c
+    ${S32Z2_FREERTOS_PORT_DIR}/portASM.S
+)
+target_include_directories(actuation_freertos_s32z2 PRIVATE
+    ${S32Z2_FREERTOS_PORT_DIR}
+)
