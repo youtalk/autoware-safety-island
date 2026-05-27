@@ -271,6 +271,12 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${LWIP_DIR}/src/include
     # NXP-supplied arch/cc.h for the GCC port (USING_RTD branch)
     ${LWIP_PATH}/code/ports/platform/generic/gcc/setting
+    # NXP-supplied arch/sys_arch.h for the FreeRTOS OS port
+    ${LWIP_PATH}/code/ports/OS/FreeRTOS
+)
+# Also pull the matching sys_arch.c into the sources.
+target_sources(actuation_freertos_s32z2 PRIVATE
+    ${LWIP_PATH}/code/ports/OS/FreeRTOS/sys_arch.c
 )
 
 # ---- NXP NETC <-> lwIP glue (eth_port.c) and RTD NETC driver ----
