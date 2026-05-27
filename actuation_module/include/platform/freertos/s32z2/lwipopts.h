@@ -36,4 +36,10 @@
 #define LWIP_SO_RCVBUF                  1
 #define SO_REUSE                        1
 
+// NXP's NETC <-> lwIP glue (code/ports/netif/ethif/rtd/generic/eth_port.c)
+// extends struct pbuf with a back-pointer to the NETC RX buffer so it can
+// hand it back to Eth_43_NETC_ProvideRxBuffer() when the pbuf is freed.
+// lwIP exposes this extension point via LWIP_PBUF_CUSTOM_DATA.
+#define LWIP_PBUF_CUSTOM_DATA           uint8_t *rx_buf;
+
 #endif  // LWIPOPTS_H
