@@ -96,3 +96,34 @@ target_sources(actuation_freertos_s32z2 PRIVATE
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32Z2_FREERTOS_PORT_DIR}
 )
+
+# ---- lwIP (from NXP RTD) ----
+find_path(LWIP_DIR
+    NAMES src/api/sockets.c
+    PATHS ${S32_RTD_PATH}/third_party/lwip
+          ${S32_RTD_PATH}/middleware/lwip
+    DOC "NXP RTD-provided lwIP source root"
+    REQUIRED NO_DEFAULT_PATH)
+message(STATUS "lwIP root: ${LWIP_DIR}")
+
+file(GLOB _lwip_core
+    ${LWIP_DIR}/src/api/*.c
+    ${LWIP_DIR}/src/core/*.c
+    ${LWIP_DIR}/src/core/ipv4/*.c
+    ${LWIP_DIR}/src/netif/*.c
+)
+target_sources(actuation_freertos_s32z2 PRIVATE ${_lwip_core})
+target_include_directories(actuation_freertos_s32z2 PRIVATE
+    ${LWIP_DIR}/src/include
+)
+
+# ---- NETC driver (from RTD MCAL) ----
+file(GLOB _netc_sources
+    ${S32_RTD_PATH}/MCAL/Eth_43_NETC_TS_*/src/*.c
+    ${S32_RTD_PATH}/MCAL/Eth_43_NETC_TS_*/src/*/*.c
+)
+target_sources(actuation_freertos_s32z2 PRIVATE ${_netc_sources})
+
+target_sources(actuation_freertos_s32z2 PRIVATE
+    lwip_bringup.c
+)
