@@ -21,10 +21,13 @@
 // before main(); we still need the IP-layer Clock_Ip_Init below to enable
 // the LINFLEXD9 module clock that SystemInit does not touch.
 
-// Clock_Ip_aClockConfig[] is defined in Clock_Ip_VS_0_PBcfg.c (S32CT
-// generated). Element 0 is the default ClockConfig0 that turns the
-// LINFLEXD9 module clock on.
-extern const Clock_Ip_ClockConfigType Clock_Ip_aClockConfig[];
+// Mcu_aClockConfigPB[] is defined in Clock_Ip_VS_0_PBcfg.c (S32CT
+// generated). The lwip example uses the AUTOSAR-Mcu naming
+// (Mcu_aClockConfigPB) rather than the bare Clock_Ip_aClockConfig from
+// non-AUTOSAR examples — both are the same Clock_Ip_ClockConfigType
+// array. Element 0 is the default ClockConfig0 that turns the LINFLEXD9
+// module clock on.
+extern const Clock_Ip_ClockConfigType Mcu_aClockConfigPB[];
 
 // LINFLEXD instance 9 is wired to the X-S32Z27X-DC FT232RQ console
 // (matches the Zephyr `_D` overlay's `zephyr,console = &uart9`).
@@ -64,7 +67,7 @@ int uart9_tx_byte(uint8_t b) {
 }
 
 int board_init(void) {
-    (void)Clock_Ip_Init(&Clock_Ip_aClockConfig[0U]);
+    (void)Clock_Ip_Init(&Mcu_aClockConfigPB[0U]);
     uart9_init_115200_8N1();
     return 0;
 }

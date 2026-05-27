@@ -376,6 +376,9 @@ target_sources(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_Eth_43_NETC.c
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_EthSwt_43_NETC.c
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_Uart.c
+    # Clock_Ip_Monitor.c uses SchM_Enter_Mcu_MCU_EXCLUSIVE_AREA_*; SchM_Mcu.c
+    # is the non-AUTOSAR default that wraps them as taskENTER/EXIT_CRITICAL.
+    ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_Mcu.c
 )
 
 target_sources(actuation_freertos_s32z2 PRIVATE
