@@ -1,7 +1,8 @@
 // Copyright (c) 2026, Arm Limited and contributors.
 // SPDX-License-Identifier: Apache-2.0
 //
-// B-1: FreeRTOS bring-up — print "actuation alive ticks=N" from a FreeRTOS task.
+// B-2: FreeRTOS entry — bring up the board, configure the network, run the
+// actuation controller.
 
 #include <cstdio>
 
@@ -9,19 +10,23 @@
 #include "task.h"
 
 #include "platform/freertos/s32z2/board_init.h"
+#include "platform/platform_network.h"
 
-static void hello_task(void *pvParameters) {
+extern "C" int actuation_main(void);   // renamed from main() via -Dmain=actuation_main
+
+static void actuation_task(void *pvParameters) {
     (void)pvParameters;
-    TickType_t n = 0;
-    for (;;) {
-        ++n;
-        printf("actuation alive ticks=%lu\n", (unsigned long)n);
-        vTaskDelay(pdMS_TO_TICKS(150));
+    if (configure_network() != 0) {
+        printf("network bring-up failed\n");
+        vTaskDelete(nullptr);
+        return;
     }
+    int ret = actuation_main();
+    printf("actuation_main returned %d\n", ret);
+    vTaskDelete(nullptr);
 }
 
-// Static idle / timer task allocations (required because
-// configSUPPORT_STATIC_ALLOCATION=1).
+// Static idle / timer task allocations (unchanged from B-1).
 static StaticTask_t xIdleTaskTCB;
 static StackType_t  xIdleStack[configMINIMAL_STACK_SIZE];
 static StaticTask_t xTimerTaskTCB;
@@ -52,10 +57,11 @@ extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskNa
 
 int main(void) {
     board_init();
-    printf("FreeRTOS on S32Z2 starting...\n");
+    printf("FreeRTOS S32Z2 actuation starting...\n");
 
+    // 32768 stack words (32-bit) = 128 KiB stack; matches the POSIX simulator.
     BaseType_t rc = xTaskCreate(
-        hello_task, "hello", 4096, nullptr,
+        actuation_task, "actuation", 32768, nullptr,
         configMAX_PRIORITIES - 2, nullptr);
     if (rc != pdPASS) {
         printf("xTaskCreate failed: %ld\n", (long)rc);
@@ -63,8 +69,6 @@ int main(void) {
     }
 
     vTaskStartScheduler();
-
-    // Unreachable.
     for (;;) {}
     return 1;
 }
