@@ -206,6 +206,7 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Gpt_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/EthSwt_43_NETC_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/EthIf_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Det_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/include
 )
@@ -273,6 +274,8 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${LWIP_PATH}/code/ports/platform/generic/gcc/setting
     # NXP-supplied arch/sys_arch.h for the FreeRTOS OS port
     ${LWIP_PATH}/code/ports/OS/FreeRTOS
+    # OsIf_rtd_port.h used by sys_arch.c
+    ${LWIP_PATH}/code/ports/osif/rtd
 )
 # Also pull the matching sys_arch.c into the sources.
 target_sources(actuation_freertos_s32z2 PRIVATE
