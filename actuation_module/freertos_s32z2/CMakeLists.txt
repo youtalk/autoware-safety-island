@@ -185,6 +185,7 @@ set_source_files_properties(${_s32z2_startup_asm} PROPERTIES
 add_executable(actuation_freertos_s32z2
     freertos_main.cpp
     board_init.c
+    newlib_stubs.c
     ${_s32z2_startup_asm}
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/exceptions.c
@@ -200,6 +201,13 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
     # `actuation_main` unmangled; expose it as an alias so both reach the
     # same function. Touching main.cpp would change POSIX/Zephyr symbols.
     "-Wl,--defsym=actuation_main=_Z14actuation_mainv"
+    # GCC's libgcc unwinder references __exidx_start/__exidx_end to walk
+    # the .ARM.exidx exception-handling section. NXP's linker_ram_r52.ld
+    # doesn't emit those symbols (the section is unused on this build),
+    # so define them as an empty range. catch-based exceptions still
+    # work; uncaught throws end in std::terminate as expected.
+    "-Wl,--defsym=__exidx_start=0"
+    "-Wl,--defsym=__exidx_end=0"
 )
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE
@@ -311,6 +319,17 @@ file(GLOB _netc_sources
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/src/*.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_netc_sources})
+
+# RTD support drivers used transitively by NETC + lwIP sys_arch:
+#   Det          - error reporting (called from every NETC entry point)
+#   BaseNXP/OsIf - OS-abstraction counters/timeouts NETC uses for retries
+#   Uart_TS      - Linflexd_Uart_Ip_SyncSend (board_init.c console)
+file(GLOB _rtd_support_sources
+    ${S32_RTD_PATH}/RTD/Det_TS_T31D53M20I1R0/src/*.c
+    ${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/src/*.c
+    ${S32_RTD_PATH}/RTD/Uart_TS_T31D53M20I1R0/src/*.c
+)
+target_sources(actuation_freertos_s32z2 PRIVATE ${_rtd_support_sources})
 
 target_sources(actuation_freertos_s32z2 PRIVATE
     lwip_bringup.c

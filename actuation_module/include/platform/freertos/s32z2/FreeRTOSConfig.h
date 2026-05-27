@@ -57,6 +57,10 @@
 #define configMAX_SYSCALL_INTERRUPT_PRIORITY \
     (configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY << (8 - configPRIO_BITS))
 
+// NXP's ARM_CR52_GIC port (port.c::vPortYield) reads per-task TLS pointers.
+// Set this >0 so pvTaskGetThreadLocalStoragePointer is built into the kernel.
+#define configNUM_THREAD_LOCAL_STORAGE_POINTERS 1
+
 #define INCLUDE_vTaskDelete                 1
 #define INCLUDE_vTaskDelay                  1
 #define INCLUDE_vTaskDelayUntil             1
