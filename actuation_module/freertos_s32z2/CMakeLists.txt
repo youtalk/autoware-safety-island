@@ -169,6 +169,10 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${CMAKE_SOURCE_DIR}/../include
     ${CMAKE_SOURCE_DIR}/../include/platform/freertos/s32z2
     ${CMAKE_CURRENT_BINARY_DIR}/generated
+    # pbcfg_shims/ is searched BEFORE generate/include so our sentinel-only
+    # versions of Mcu_VS_0_PBcfg.h / Power_Ip_VS_0_PBcfg.h /
+    # Ram_Ip_VS_0_PBcfg.h override the empty stubs S32CT left behind.
+    ${CMAKE_SOURCE_DIR}/pbcfg_shims
     ${S32Z2_FREERTOS_KERNEL_DIR}
     ${S32Z2_FREERTOS_PORT_DIR}
     ${S32Z2_FREERTOS_EXAMPLE}/include
@@ -186,6 +190,7 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Gpt_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/EthSwt_43_NETC_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Det_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/include
 )
 
