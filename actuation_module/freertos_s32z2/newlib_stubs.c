@@ -37,7 +37,7 @@ int _gettimeofday(struct timeval *tv, void *tz) { (void)tv; (void)tz; errno = EN
 
 // Tiny static heap for any incidental newlib malloc (FreeRTOS code uses
 // pvPortMalloc + heap_4, so this just covers stragglers like libc internals).
-#define NEWLIB_HEAP_SIZE (64 * 1024)
+#define NEWLIB_HEAP_SIZE (16 * 1024)
 static char newlib_heap[NEWLIB_HEAP_SIZE];
 
 void *_sbrk(intptr_t incr)
