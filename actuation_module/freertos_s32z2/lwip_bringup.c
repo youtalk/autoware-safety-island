@@ -19,11 +19,9 @@
 
 #include "platform/freertos/s32z2/lwip_init.h"
 
-// RTD-provided NETC + lwIP glue. Substitute the actual symbols observed in
-// Task 11 Step 1. Typical names:
-//   err_t ethernetif_init(struct netif *netif);   // from RTD-supplied ethernetif.c
-//   void  Eth_43_NETC_Init(...);                  // RTD MCAL initialiser
-extern err_t ethernetif_init(struct netif *netif);
+// NXP-provided NETC <-> lwIP glue from
+// $LWIP_PATH/code/ports/netif/ethif/rtd/generic/eth_port.c.
+extern err_t ethif_ethernetif_init(struct netif *netif);
 
 static struct netif s_netif;
 static SemaphoreHandle_t s_dhcp_done;
@@ -54,7 +52,7 @@ int lwip_bring_up_blocking(void) {
 
     ip4_addr_t ipaddr = {0}, netmask = {0}, gw = {0};
     if (netif_add(&s_netif, &ipaddr, &netmask, &gw, NULL,
-                  ethernetif_init, tcpip_input) == NULL) {
+                  ethif_ethernetif_init, tcpip_input) == NULL) {
         printf("lwip: netif_add failed\n");
         return -3;
     }

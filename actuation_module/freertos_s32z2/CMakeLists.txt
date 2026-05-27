@@ -2,10 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # FreeRTOS on NXP S32Z2 (Cortex-R52) build entry point.
-# Build with:
-#   S32_RTD_PATH=/opt/nxp/<rtd-version> \
-#     cmake -S actuation_module/freertos_s32z2 -B build-s32z2 \
-#       -DCMAKE_TOOLCHAIN_FILE=actuation_module/freertos_s32z2/cmake/arm-cortex-r52.cmake
+#
+# Three NXP packages from the Flexnet portal must be extracted and exported as
+# environment variables before invoking cmake:
+#
+#   export S32_RTD_PATH=~/nxp/RTD_S32ZE_2.0.1/_jar_family/S32DS/software/PlatformSDK_S32ZE
+#   export FREERTOS_PATH=~/nxp/FreeRTOS_S32ZE_4.0.0/_jar/S32DS/software/PlatformSDK_S32ZE/FreeRTOS
+#   export LWIP_PATH=~/nxp/TCPIP_S32ZE_3.0.0/_jar/S32DS/software/PlatformSDK_S32ZE/stacks/tcpip
+#
+# Then:
+#   cmake -S actuation_module/freertos_s32z2 -B build-s32z2 \
+#         -DCMAKE_TOOLCHAIN_FILE=actuation_module/freertos_s32z2/cmake/arm-cortex-r52.cmake
 #   cmake --build build-s32z2 -j
 
 cmake_minimum_required(VERSION 3.22)
@@ -15,94 +22,108 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ---- NXP RTD location ----
-if(NOT DEFINED ENV{S32_RTD_PATH})
-    message(FATAL_ERROR
-        "S32_RTD_PATH is not set. Point it to the extracted NXP S32 RTD root, "
-        "e.g. S32_RTD_PATH=/opt/nxp/RTD_4.0.x . The RTD is downloaded manually "
-        "from the NXP Software Licensing portal (see actuation_module/freertos_s32z2/README.md).")
-endif()
-set(S32_RTD_PATH $ENV{S32_RTD_PATH})
+# ---- NXP package locations (three roots) ----
+foreach(_var IN ITEMS S32_RTD_PATH FREERTOS_PATH LWIP_PATH)
+    if(NOT DEFINED ENV{${_var}})
+        message(FATAL_ERROR
+            "${_var} is not set. Point it to the extracted NXP package root. "
+            "See actuation_module/freertos_s32z2/README.md for the layout.")
+    endif()
+    set(${_var} $ENV{${_var}})
+    if(NOT IS_DIRECTORY "${${_var}}")
+        message(FATAL_ERROR "${_var}=${${_var}} is not a directory.")
+    endif()
+endforeach()
 
-if(NOT IS_DIRECTORY "${S32_RTD_PATH}")
-    message(FATAL_ERROR "S32_RTD_PATH=${S32_RTD_PATH} is not a directory.")
-endif()
+# Reference FreeRTOS example (provides startup, linker, and demo board config).
+set(S32Z2_FREERTOS_EXAMPLE
+    ${FREERTOS_PATH}/examples/S32DS/FreeRTOS_Toggle_Led_Example_S32Z2XX_R52)
 
-# Locate the FreeRTOS Cortex-R52 port shipped in the RTD. The exact subdirectory
-# depends on the RTD version; engineer must inspect the archive (Task 0 Step 2)
-# and adjust the PATHS line if the layout differs.
+# Locate the FreeRTOS Cortex-R52 port (ARM_CR52_GIC, self-contained in port.c).
 find_path(S32Z2_FREERTOS_PORT_DIR
     NAMES portmacro.h port.c
-    PATHS ${S32_RTD_PATH}/FreeRTOS/portable/GCC/ARM_Cortex_R52
-          ${S32_RTD_PATH}/freertos/portable/GCC/ARM_Cortex_R52
-    DOC "NXP RTD-provided FreeRTOS Cortex-R52 port directory"
+    PATHS ${FREERTOS_PATH}/Source/portable/GCC/ARM_CR52_GIC
+    DOC "NXP FreeRTOS Cortex-R52 port directory"
     REQUIRED NO_DEFAULT_PATH)
 
 find_path(S32Z2_FREERTOS_KERNEL_DIR
     NAMES FreeRTOS.h
-    PATHS ${S32_RTD_PATH}/FreeRTOS/include
-          ${S32_RTD_PATH}/freertos/include
-    DOC "NXP RTD-provided FreeRTOS kernel include directory"
+    PATHS ${FREERTOS_PATH}/Source/include
+    DOC "NXP FreeRTOS kernel include directory"
     REQUIRED NO_DEFAULT_PATH)
+
+set(S32Z2_FREERTOS_SOURCE_DIR ${FREERTOS_PATH}/Source)
 
 message(STATUS "S32Z2 FreeRTOS port directory: ${S32Z2_FREERTOS_PORT_DIR}")
 message(STATUS "S32Z2 FreeRTOS kernel headers: ${S32Z2_FREERTOS_KERNEL_DIR}")
+message(STATUS "S32Z2 FreeRTOS example:        ${S32Z2_FREERTOS_EXAMPLE}")
 
 # ---- Platform definitions ----
 add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 
-# ---- Application executable (skeleton; expands in later tasks) ----
+# ---- Application executable ----
+# startup.s / linker_ram_r52.ld are NXP Confidential and Proprietary; they are
+# referenced in-place from the extracted FreeRTOS example and never copied
+# into this repository.
 add_executable(actuation_freertos_s32z2
     freertos_main.cpp
     board_init.c
-    startup.S
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/startup.s
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/Vector_Table.s
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core_utility.s
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/exceptions_stack.s
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core.c
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/exceptions.c
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/gic500.c
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/startup_init.c
+    ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/system.c
 )
 
 target_link_options(actuation_freertos_s32z2 PRIVATE
-    -T${CMAKE_CURRENT_SOURCE_DIR}/linker.ld
+    -T${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Linker_Files/linker_ram_r52.ld
 )
-
-# Pull in RTD driver objects (Mcu, Port, Platform). The engineer must add
-# explicit paths once the RTD layout is known. Reference template:
-# file(GLOB _rtd_drivers
-#     ${S32_RTD_PATH}/MCAL/Mcu_TS_T40D34M40I0R0/src/Mcu*.c
-#     ${S32_RTD_PATH}/MCAL/Port_TS_T40D34M40I0R0/src/Port*.c
-#     ${S32_RTD_PATH}/MCAL/Platform_TS_T40D34M40I0R0/src/Platform*.c)
-# target_sources(actuation_freertos_s32z2 PRIVATE ${_rtd_drivers})
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${CMAKE_SOURCE_DIR}/../include
     ${CMAKE_SOURCE_DIR}/../include/platform/freertos/s32z2
     ${S32Z2_FREERTOS_KERNEL_DIR}
     ${S32Z2_FREERTOS_PORT_DIR}
+    ${S32Z2_FREERTOS_EXAMPLE}/include
+    ${S32Z2_FREERTOS_EXAMPLE}/RTD/include
+    ${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/header
+    ${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Mcl_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Port_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Platform_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Uart_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Gpt_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
 )
 
 set_target_properties(actuation_freertos_s32z2 PROPERTIES SUFFIX ".elf")
 
+# ---- FreeRTOS kernel + ARM_CR52_GIC port ----
+# The ARM_CR52_GIC port is self-contained in port.c (no portASM.S).
 file(GLOB _freertos_core
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../tasks.c
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../queue.c
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../list.c
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../timers.c
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../event_groups.c
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../stream_buffer.c
-    ${S32Z2_FREERTOS_KERNEL_DIR}/../portable/MemMang/heap_4.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/tasks.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/queue.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/list.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/timers.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/event_groups.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/stream_buffer.c
+    ${S32Z2_FREERTOS_SOURCE_DIR}/portable/MemMang/heap_4.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE
     ${_freertos_core}
     ${S32Z2_FREERTOS_PORT_DIR}/port.c
-    ${S32Z2_FREERTOS_PORT_DIR}/portASM.S
-)
-target_include_directories(actuation_freertos_s32z2 PRIVATE
-    ${S32Z2_FREERTOS_PORT_DIR}
 )
 
-# ---- lwIP (from NXP RTD) ----
+# ---- lwIP (from NXP TCP/IP Stack package) ----
 find_path(LWIP_DIR
     NAMES src/api/sockets.c
-    PATHS ${S32_RTD_PATH}/third_party/lwip
-          ${S32_RTD_PATH}/middleware/lwip
-    DOC "NXP RTD-provided lwIP source root"
+    PATHS ${LWIP_PATH}/lwip
+    DOC "NXP-provided lwIP source root"
     REQUIRED NO_DEFAULT_PATH)
 message(STATUS "lwIP root: ${LWIP_DIR}")
 
@@ -117,10 +138,15 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${LWIP_DIR}/src/include
 )
 
-# ---- NETC driver (from RTD MCAL) ----
+# ---- NXP NETC <-> lwIP glue (eth_port.c) and RTD NETC driver ----
+target_sources(actuation_freertos_s32z2 PRIVATE
+    ${LWIP_PATH}/code/ports/netif/ethif/rtd/generic/eth_port.c
+)
+target_include_directories(actuation_freertos_s32z2 PRIVATE
+    ${LWIP_PATH}/code/ports/netif/ethif/rtd/generic
+)
 file(GLOB _netc_sources
-    ${S32_RTD_PATH}/MCAL/Eth_43_NETC_TS_*/src/*.c
-    ${S32_RTD_PATH}/MCAL/Eth_43_NETC_TS_*/src/*/*.c
+    ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/src/*.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_netc_sources})
 
@@ -157,7 +183,7 @@ set(CycloneDDS_DIR ${CDDS_HOST_PREFIX}/lib/cmake/CycloneDDS)
 # ---- Eigen3 (host package, header-only) ----
 find_package(Eigen3 REQUIRED)
 
-# ---- Autoware Messages (IDL → C via host idlc) ----
+# ---- Autoware Messages (IDL -> C via host idlc) ----
 add_subdirectory(${CMAKE_SOURCE_DIR}/../src/autoware/autoware_msgs
                  ${CMAKE_CURRENT_BINARY_DIR}/autoware_msgs)
 
