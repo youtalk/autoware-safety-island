@@ -143,6 +143,10 @@ add_compile_definitions(USING_RTD=1 S32Z27=1)
 # and `else` ends up orphaned.
 add_compile_definitions(CPU_CORTEX_R52=1)
 
+# (_S32DS_FREERTOS_ is applied per-source to generic_timer.c below — adding
+# it globally pulls OsIf_ArchCfg.h into eth_port.c too, which conflicts with
+# lwIP's sys_mutex_t typedef.)
+
 # Eigen 3.4's NEON specializations assume `int32_t = int`, but
 # arm-none-eabi newlib types `int32_t` as `long int` on Cortex-R52, which
 # breaks ploadu<PacketI>(...) overloads. Determinism matters more than SIMD
@@ -201,6 +205,11 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
     # `actuation_main` unmangled; expose it as an alias so both reach the
     # same function. Touching main.cpp would change POSIX/Zephyr symbols.
     "-Wl,--defsym=actuation_main=_Z14actuation_mainv"
+    # generic_timer.c registers SysTick_Handler as the physical-timer ISR
+    # but doesn't define it; the CR52 port supplies xPortSysTickHandler for
+    # the non-SMP path (xPortCoreSysTickHandler exists only when
+    # configUSE_SMP==1). Alias them at link time.
+    "-Wl,--defsym=SysTick_Handler=xPortSysTickHandler"
     # GCC's libgcc unwinder references __exidx_start/__exidx_end to walk
     # the .ARM.exidx exception-handling section. NXP's linker_ram_r52.ld
     # doesn't emit those symbols (the section is unused on this build),
@@ -271,7 +280,14 @@ file(GLOB _freertos_core
 target_sources(actuation_freertos_s32z2 PRIVATE
     ${_freertos_core}
     ${S32Z2_FREERTOS_PORT_DIR}/port.c
+    # ARM generic-timer-driven tick source: provides the weak
+    # prvSetupTimerInterrupt() that port.c calls from vTaskStartScheduler.
+    ${S32Z2_FREERTOS_SOURCE_DIR}/generic_timer.c
 )
+# Force generic_timer.c onto the S32DS branch (uses OsIf_ArchCfg.h + core.h
+# instead of a generic gic.h that NXP doesn't actually ship).
+set_source_files_properties(${S32Z2_FREERTOS_SOURCE_DIR}/generic_timer.c
+    PROPERTIES COMPILE_DEFINITIONS "_S32DS_FREERTOS_=1")
 
 # common/'s `#include <pthread.h>` is resolved by the hand-rolled shim at
 # actuation_module/include/platform/freertos/s32z2/pthread.h (that path is
@@ -328,6 +344,9 @@ file(GLOB _rtd_support_sources
     ${S32_RTD_PATH}/RTD/Det_TS_T31D53M20I1R0/src/*.c
     ${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/src/*.c
     ${S32_RTD_PATH}/RTD/Uart_TS_T31D53M20I1R0/src/*.c
+    # Siul2_Port_Ip.c provides the IP-layer Siul2_Port_Ip_PinInit()
+    # board_init.c uses to mux PORT150 → ALT1 → LIN_9_TX.
+    ${S32_RTD_PATH}/RTD/Port_TS_T31D53M20I1R0/src/Siul2_Port_Ip.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_rtd_support_sources})
 

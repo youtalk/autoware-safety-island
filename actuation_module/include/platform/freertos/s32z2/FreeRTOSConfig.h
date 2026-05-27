@@ -12,6 +12,10 @@
 // Substitute the value observed in Task 5 Step 1 — the clock Mcu_Init programs.
 #define configCPU_CLOCK_HZ                  ((uint32_t)240000000UL)
 
+// Use the Cortex-R52 physical timer (CNTP_*) rather than the virtual timer.
+// Required by NXP's generic_timer.c to pick a TIMER_INT_ID at preprocess time.
+#define configUSE_PHYSICAL_TIMER            1
+
 #define configUSE_PREEMPTION                1
 #define configUSE_IDLE_HOOK                 0
 #define configUSE_TICK_HOOK                 0

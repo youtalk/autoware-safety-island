@@ -13,10 +13,13 @@
 #include "Linflexd_Uart_Ip.h"
 #include "Linflexd_Uart_Ip_VS_0_PBcfg.h"
 
-// RTD-provided initialisation entry points (from the S32CT-generated configs).
-extern void Mcu_Init(void);
-extern void Port_Init(void);
-extern void Platform_Init(void);
+// AUTOSAR Mcu_Init / Port_Init / Platform_Init would require Mcu_Cfg.c /
+// Port_Cfg.c / Platform_Cfg.c — those PB configs are absent from the lwip
+// S32CT example (Components view does not instantiate them), so the build
+// filters them out. The NXP startup.s + SystemInit handle MCU bring-up
+// before main(), and the IP-layer Siul2_Port_Ip_PinInit /
+// Linflexd_Uart_Ip_Init calls below cover the one pin + UART instance we
+// actually need for the console.
 
 // LINFLEXD instance 9 is wired to the X-S32Z27X-DC FT232RQ console
 // (matches the Zephyr `_D` overlay's `zephyr,console = &uart9`).
@@ -56,12 +59,13 @@ int uart9_tx_byte(uint8_t b) {
 }
 
 int board_init(void) {
-    Mcu_Init();
-    Platform_Init();
-    Port_Init();
     uart9_init_115200_8N1();
     return 0;
 }
+
+// generic_timer.c registers SysTick_Handler as the physical-timer ISR but
+// leaves it up to the application. We alias it to the CR52 port's
+// xPortSysTickHandler via a linker --defsym in CMakeLists.txt.
 
 // Newlib retarget: every printf/puts/fwrite to stdout/stderr ends up here.
 int _write(int fd, const char *buf, int len) {
