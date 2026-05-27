@@ -142,13 +142,24 @@ add_compile_definitions(_SYS__PTHREADTYPES_H_=1 _SYS_SCHED_H_=1)
 # startup.s / linker_ram_r52.ld are NXP Confidential and Proprietary; they are
 # referenced in-place from the extracted FreeRTOS example and never copied
 # into this repository.
-add_executable(actuation_freertos_s32z2
-    freertos_main.cpp
-    board_init.c
+set(_s32z2_startup_asm
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/startup.s
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/Vector_Table.s
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core_utility.s
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/exceptions_stack.s
+)
+# The NXP startup .s files use C preprocessor macros (#ifdef __ghs__ etc.)
+# to switch toolchains and define THUMB_CODE. GNU `as` does not preprocess
+# lowercase .s files by default; force cpp preprocessing so the GCC branch
+# of the conditionals is taken.
+set_source_files_properties(${_s32z2_startup_asm} PROPERTIES
+    COMPILE_OPTIONS "-x;assembler-with-cpp"
+)
+
+add_executable(actuation_freertos_s32z2
+    freertos_main.cpp
+    board_init.c
+    ${_s32z2_startup_asm}
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/exceptions.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/gic500.c
