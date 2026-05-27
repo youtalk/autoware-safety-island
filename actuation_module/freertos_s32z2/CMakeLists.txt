@@ -381,18 +381,17 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/../src/autoware/autoware_msgs
 # ---- Autoware controller core (shared with POSIX simulator) ----
 include(${CMAKE_SOURCE_DIR}/../cmake/actuation_core.cmake)
 
-# Rename actuation src main() to actuation_main(); the FreeRTOS wrapper
-# provides the real main() in freertos_main.cpp.
-add_compile_definitions(main=actuation_main)
-
 target_sources(actuation_freertos_s32z2 PRIVATE
     ${ACTUATION_DIR}/src/main.cpp
     ${APP_SOURCES}
 )
 
-# Undo the main rename for the FreeRTOS wrapper itself.
-set_source_files_properties(freertos_main.cpp PROPERTIES
-    COMPILE_DEFINITIONS "main=main"
+# Rename main() to actuation_main() only inside the Autoware app's main.cpp;
+# freertos_main.cpp keeps its own main(), and startup.s `bl main` must reach
+# that wrapper to bring up the FreeRTOS scheduler. A global -Dmain= would
+# rewrite startup.s too and skip the wrapper entirely.
+set_source_files_properties(${ACTUATION_DIR}/src/main.cpp PROPERTIES
+    COMPILE_DEFINITIONS "main=actuation_main"
 )
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE
