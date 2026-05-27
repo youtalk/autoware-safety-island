@@ -88,6 +88,47 @@ message(STATUS "S32Z2 FreeRTOS port directory: ${S32Z2_FREERTOS_PORT_DIR}")
 message(STATUS "S32Z2 FreeRTOS kernel headers: ${S32Z2_FREERTOS_KERNEL_DIR}")
 message(STATUS "S32Z2 FreeRTOS example:        ${S32Z2_FREERTOS_EXAMPLE}")
 
+# ---- Configurable values ----
+# Mirror the POSIX FreeRTOS build's Zephyr-Kconfig-equivalent knobs so the
+# shared platform_config.h works unchanged.
+set(CONFIG_LOG_LEVEL 1 CACHE STRING "Log level (0=off, 1=info, 2=debug)")
+set(CONFIG_LOG_THROTTLE_RATE 3 CACHE STRING "Log throttle rate in seconds")
+set(CONFIG_DDS_DOMAIN_ID 2 CACHE STRING "DDS domain ID")
+set(CONFIG_DDS_NETWORK_INTERFACE "" CACHE STRING "DDS network interface name (empty=auto)")
+set(CONFIG_DDS_LOG_LEVEL 0 CACHE STRING "DDS log level (0=off, 1=warn, 2=debug)")
+set(CONFIG_THREAD_STACK_SIZE 262144 CACHE STRING "Thread stack size in bytes")
+set(CONFIG_NET_DHCPV4_INITIAL_DELAY_MAX 0 CACHE STRING "DHCP delay")
+set(CONFIG_ENABLE_SNTP OFF CACHE BOOL "Enable SNTP time sync")
+
+set(CONFIG_CONTROL_CMD_OUTPUT_MODE "DDS_ONLY" CACHE STRING "Control command output mode: DDS_ONLY, CAN_ONLY, DDS_AND_CAN")
+set_property(CACHE CONFIG_CONTROL_CMD_OUTPUT_MODE PROPERTY STRINGS "DDS_ONLY" "CAN_ONLY" "DDS_AND_CAN")
+
+set(CONFIG_CONTROL_CMD_OUTPUT_DDS_ONLY 0)
+set(CONFIG_CONTROL_CMD_OUTPUT_CAN_ONLY 0)
+set(CONFIG_CONTROL_CMD_OUTPUT_DDS_AND_CAN 0)
+set(CONFIG_CONTROL_CMD_CAN_OUTPUT 0)
+set(CONFIG_CONTROL_CMD_DDS_OUTPUT 0)
+
+if(CONFIG_CONTROL_CMD_OUTPUT_MODE STREQUAL "DDS_ONLY")
+    set(CONFIG_CONTROL_CMD_OUTPUT_DDS_ONLY 1)
+    set(CONFIG_CONTROL_CMD_DDS_OUTPUT 1)
+elseif(CONFIG_CONTROL_CMD_OUTPUT_MODE STREQUAL "CAN_ONLY")
+    set(CONFIG_CONTROL_CMD_OUTPUT_CAN_ONLY 1)
+    set(CONFIG_CONTROL_CMD_CAN_OUTPUT 1)
+elseif(CONFIG_CONTROL_CMD_OUTPUT_MODE STREQUAL "DDS_AND_CAN")
+    set(CONFIG_CONTROL_CMD_OUTPUT_DDS_AND_CAN 1)
+    set(CONFIG_CONTROL_CMD_CAN_OUTPUT 1)
+    set(CONFIG_CONTROL_CMD_DDS_OUTPUT 1)
+else()
+    message(FATAL_ERROR "Unsupported CONFIG_CONTROL_CMD_OUTPUT_MODE=${CONFIG_CONTROL_CMD_OUTPUT_MODE}. Use DDS_ONLY, CAN_ONLY, or DDS_AND_CAN.")
+endif()
+
+configure_file(
+    ${ACTUATION_DIR}/include/platform/freertos/freertos_config_generated.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/freertos_config_generated.h
+    @ONLY
+)
+
 # ---- Platform definitions ----
 add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 
@@ -116,6 +157,7 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${CMAKE_SOURCE_DIR}/../include
     ${CMAKE_SOURCE_DIR}/../include/platform/freertos/s32z2
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
     ${S32Z2_FREERTOS_KERNEL_DIR}
     ${S32Z2_FREERTOS_PORT_DIR}
     ${S32Z2_FREERTOS_EXAMPLE}/include
@@ -128,6 +170,7 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Port_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Platform_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Platform_TS_T31D53M20I1R0/startup/include
     ${S32_RTD_PATH}/RTD/Uart_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Gpt_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
