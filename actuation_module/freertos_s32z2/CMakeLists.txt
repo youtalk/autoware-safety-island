@@ -142,9 +142,9 @@ add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 # replacements before each TU starts parsing; the empty stubs then do
 # nothing and the sentinel comparisons pass.
 add_compile_options(
-    -imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Mcu_VS_0_PBcfg.h
-    -imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Power_Ip_VS_0_PBcfg.h
-    -imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Ram_Ip_VS_0_PBcfg.h
+    "SHELL:-imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Mcu_VS_0_PBcfg.h"
+    "SHELL:-imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Power_Ip_VS_0_PBcfg.h"
+    "SHELL:-imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Ram_Ip_VS_0_PBcfg.h"
 )
 
 # ---- Application executable ----
