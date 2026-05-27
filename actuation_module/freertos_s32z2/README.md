@@ -108,15 +108,59 @@ Workflow:
    - **NETC**: leave Ethernet 0 enabled (Ethernet 1 is currently
      unsupported by the Zephyr port, but the FreeRTOS path can revisit).
 5. **Update Code** — S32 Config Tools writes the expanded `*_PBcfg.c` /
-   `*_Cfg.h` / `*_Cfg.c` files into the project's `generate_PB/src/`
-   directory.
-6. Copy those generated files into
-   `actuation_module/freertos_s32z2/generated/<driver>/` and extend
-   `CMakeLists.txt` to pick them up via `target_sources(... ${GENERATED_*})`.
+   `*_Cfg.h` / `*_Cfg.c` files into the project's `generate/src/`,
+   `generate/include/`, and `board/` directories. With the Pins /
+   Peripherals / Clocks / DCD tools all enabled, the lwip example
+   produces ~38 C sources and ~80 headers covering Mcu, Clock_Ip,
+   Port, Pit_Ip, Gpt, Linflexd_Uart_Ip, NETC, Platform, Power_Ip,
+   Ram_Ip, Mpu, Mru, OsIf, IntCtrl, DiportSd.
+6. Set `S32CT_GENERATED_DIR` to the S32CT project root before running
+   CMake. The build expects the layout
+   `$S32CT_GENERATED_DIR/{board,generate/include,generate/src}`. A
+   typical value after running the example wizard:
+   `S32CT_GENERATED_DIR=~/workspaceS32DS.3.6.2/lwip_S32Z27X_FreeRTOS_R52`.
 
-These generated files are board-specific and *not* NXP-confidential —
-they may be committed to the repo (the templates that produced them are
-the confidential part).
+The generated files **carry the NXP Confidential and Proprietary
+licence header** (inherited from the templates) and must **not** be
+committed to a public repository. The repo's `.gitignore` excludes
+`actuation_module/freertos_s32z2/generated/` so accidental copies stay
+out of git. Each developer regenerates their own.
+
+### Pitfalls observed on Ubuntu 24.04 + S32DS 3.6.2
+
+- The S32CT runtime calls codegen scripts by lowercase relative paths
+  (`../mcu/mcu_codegen.js`, `../gpt/gpt_codegen.js`, …) but the
+  shipped directories are mixed-case (`Mcu/`, `Gpt/`). On a
+  case-sensitive filesystem the scripts are not found and code
+  generation silently skips Gpt / Mcu / Port. Fix by creating
+  lowercase symlinks alongside the capitalised dirs:
+
+  ```bash
+  cd /usr/local/NXP/S32DS.3.6.2/eclipse/mcu_data/components/PlatformSDK_S32ZE
+  sudo bash -c 'for d in */; do
+      n=$(basename "$d"); lower=$(echo "$n" | tr "[:upper:]" "[:lower:]")
+      [ "$n" = "$lower" ] && continue
+      [ -L "$lower" ] && continue
+      ln -s "$n" "$lower"
+  done'
+  ```
+
+- The first time the imported project is opened, S32CT shows a
+  *Migration to Other Component Versions* dialog. Under Xvfb that
+  SWT dialog renders as a black rectangle in `xwd` / VNC output and
+  blocks the workbench. Dismiss it via xdotool:
+
+  ```bash
+  DISPLAY=:99 xdotool key --window \
+      "$(DISPLAY=:99 xdotool search --name 'Migration to Other Component Versions' | head -1)" Escape
+  ```
+
+- The lwip example's default Gpt component points its
+  `Pit Hardware Module` at `CE_PIT_0` (capture-edge PIT). For our use
+  (FreeRTOS tick) change it to `PIT_0` and set
+  `GptChannelTickFrequency` to the configured PIT clock and
+  `GptClockReferencePoint` to the PIT_CLK signal exported by the
+  Mcu/Clock_Ip configuration.
 
 ## Build
 
@@ -124,6 +168,7 @@ the confidential part).
 export S32_RTD_PATH=...
 export FREERTOS_PATH=...
 export LWIP_PATH=...
+export S32CT_GENERATED_DIR=~/workspaceS32DS.3.6.2/lwip_S32Z27X_FreeRTOS_R52
 
 cmake -S actuation_module/freertos_s32z2 -B build-s32z2 \
     -DCMAKE_TOOLCHAIN_FILE=$PWD/actuation_module/freertos_s32z2/cmake/arm-cortex-r52.cmake

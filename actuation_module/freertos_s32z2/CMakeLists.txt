@@ -35,6 +35,31 @@ foreach(_var IN ITEMS S32_RTD_PATH FREERTOS_PATH LWIP_PATH)
     endif()
 endforeach()
 
+# ---- RTD Config-Tools-generated PB configurations ----
+# These come from S32 Config Tools (S32DS) and live OUTSIDE this repository
+# because they carry the NXP Confidential and Proprietary licence header.
+# Point S32CT_GENERATED_DIR at an S32CT project root that has the layout:
+#   $S32CT_GENERATED_DIR/
+#     board/Siul2_Port_Ip_Cfg.{c,h}
+#     generate/include/*.h
+#     generate/src/*.c
+# Typical value: ~/workspaceS32DS.3.6.2/lwip_S32Z27X_FreeRTOS_R52
+if(NOT DEFINED ENV{S32CT_GENERATED_DIR})
+    message(FATAL_ERROR
+        "S32CT_GENERATED_DIR is not set. Generate the RTD PB configurations "
+        "in S32 Design Studio's S32 Configuration Tools (Update Code on a "
+        ".mex import of $LWIP_PATH/examples/.../lwip_S32Z27X_FreeRTOS_R52) "
+        "then point S32CT_GENERATED_DIR at that project root. See "
+        "actuation_module/freertos_s32z2/README.md.")
+endif()
+set(S32CT_GENERATED_DIR $ENV{S32CT_GENERATED_DIR})
+if(NOT IS_DIRECTORY "${S32CT_GENERATED_DIR}/generate/src")
+    message(FATAL_ERROR
+        "S32CT_GENERATED_DIR=${S32CT_GENERATED_DIR} does not contain a "
+        "generate/src subdirectory (expected output of S32CT Update Code).")
+endif()
+message(STATUS "S32CT generated configs: ${S32CT_GENERATED_DIR}")
+
 # Reference FreeRTOS example (provides startup, linker, and demo board config).
 set(S32Z2_FREERTOS_EXAMPLE
     ${FREERTOS_PATH}/examples/S32DS/FreeRTOS_Toggle_Led_Example_S32Z2XX_R52)
@@ -90,6 +115,8 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32Z2_FREERTOS_PORT_DIR}
     ${S32Z2_FREERTOS_EXAMPLE}/include
     ${S32Z2_FREERTOS_EXAMPLE}/RTD/include
+    ${S32CT_GENERATED_DIR}/generate/include
+    ${S32CT_GENERATED_DIR}/board
     ${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/header
     ${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Mcl_TS_T31D53M20I1R0/include
@@ -100,6 +127,13 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Gpt_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
 )
+
+# Pull all generated PB/Cfg sources into the target. The Mcu_VS_0_PBcfg.c is
+# an empty placeholder in the lwip example variant so glob-include is fine.
+file(GLOB _s32ct_generated_src
+    ${S32CT_GENERATED_DIR}/generate/src/*.c
+    ${S32CT_GENERATED_DIR}/board/*.c)
+target_sources(actuation_freertos_s32z2 PRIVATE ${_s32ct_generated_src})
 
 set_target_properties(actuation_freertos_s32z2 PROPERTIES SUFFIX ".elf")
 

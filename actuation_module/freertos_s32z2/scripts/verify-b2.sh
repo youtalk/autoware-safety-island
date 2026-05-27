@@ -6,6 +6,7 @@ set -euo pipefail
 : "${S32_RTD_PATH:?Set S32_RTD_PATH}"
 : "${FREERTOS_PATH:?Set FREERTOS_PATH}"
 : "${LWIP_PATH:?Set LWIP_PATH}"
+: "${S32CT_GENERATED_DIR:?Set S32CT_GENERATED_DIR to your S32 Config Tools project root}"
 : "${S32DS_PATH:=/usr/local/NXP/S32DS.3.6.2}"
 : "${ZEPHYR_VENV:=$HOME/zephyr-env}"
 : "${UART_DEV:=/dev/ttyUSB0}"
