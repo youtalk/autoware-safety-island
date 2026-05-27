@@ -137,6 +137,18 @@ add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 # that does not exist for GCC.
 add_compile_definitions(USING_RTD=1 S32Z27=1)
 
+# NXP's lwIP FreeRTOS sys_arch.c uses CPU_CORTEX_* guards to pick between
+# Cortex-M (NVIC) and Cortex-R52 (GIC) ISR entry checks. Without one of
+# them defined the preprocessor leaves both `if (...)` lines in the source
+# and `else` ends up orphaned.
+add_compile_definitions(CPU_CORTEX_R52=1)
+
+# Eigen 3.4's NEON specializations assume `int32_t = int`, but
+# arm-none-eabi newlib types `int32_t` as `long int` on Cortex-R52, which
+# breaks ploadu<PacketI>(...) overloads. Determinism matters more than SIMD
+# throughput on the safety island; disable Eigen vectorization here.
+add_compile_definitions(EIGEN_DONT_VECTORIZE=1)
+
 # S32CT's Update Code left {Mcu,Power_Ip,Ram_Ip}_VS_0_PBcfg.h as 1-byte
 # empty stubs inside S32CT_GENERATED_DIR/generate/include. The matching
 # *_Cfg.h files do '#include "X_VS_0_PBcfg.h"' (quoted form, which prefers
@@ -207,6 +219,7 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/EthSwt_43_NETC_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/EthIf_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/Mka_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Det_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/include
 )
