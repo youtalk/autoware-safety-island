@@ -132,6 +132,21 @@ configure_file(
 # ---- Platform definitions ----
 add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 
+# S32CT's Update Code left {Mcu,Power_Ip,Ram_Ip}_VS_0_PBcfg.h as 1-byte
+# empty stubs inside S32CT_GENERATED_DIR/generate/include. The matching
+# *_Cfg.h files do '#include "X_VS_0_PBcfg.h"' (quoted form, which prefers
+# the including file's own directory over -I) and then run a vendor /
+# AUTOSAR / SW version sentinel check that the empty stubs cannot satisfy.
+#
+# Use -imacros to pre-seed the sentinel macros from our pbcfg_shims/
+# replacements before each TU starts parsing; the empty stubs then do
+# nothing and the sentinel comparisons pass.
+add_compile_options(
+    -imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Mcu_VS_0_PBcfg.h
+    -imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Power_Ip_VS_0_PBcfg.h
+    -imacros ${CMAKE_CURRENT_SOURCE_DIR}/pbcfg_shims/Ram_Ip_VS_0_PBcfg.h
+)
+
 # ---- Application executable ----
 # startup.s / linker_ram_r52.ld are NXP Confidential and Proprietary; they are
 # referenced in-place from the extracted FreeRTOS example and never copied
@@ -169,10 +184,6 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${CMAKE_SOURCE_DIR}/../include
     ${CMAKE_SOURCE_DIR}/../include/platform/freertos/s32z2
     ${CMAKE_CURRENT_BINARY_DIR}/generated
-    # pbcfg_shims/ is searched BEFORE generate/include so our sentinel-only
-    # versions of Mcu_VS_0_PBcfg.h / Power_Ip_VS_0_PBcfg.h /
-    # Ram_Ip_VS_0_PBcfg.h override the empty stubs S32CT left behind.
-    ${CMAKE_SOURCE_DIR}/pbcfg_shims
     ${S32Z2_FREERTOS_KERNEL_DIR}
     ${S32Z2_FREERTOS_PORT_DIR}
     ${S32Z2_FREERTOS_EXAMPLE}/include
