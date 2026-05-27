@@ -185,6 +185,7 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Uart_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Gpt_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/include
+    ${S32_RTD_PATH}/RTD/EthSwt_43_NETC_TS_T31D53M20I1R0/include
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/include
 )
 
