@@ -132,6 +132,11 @@ configure_file(
 # ---- Platform definitions ----
 add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 
+# Take the RTD-friendly branches in NXP's lwIP arch/cc.h and lwipopts:
+# without these, arch/cc.h pulls a toolchain-dependent device_registers.h
+# that does not exist for GCC.
+add_compile_definitions(USING_RTD=1 S32Z27=1)
+
 # S32CT's Update Code left {Mcu,Power_Ip,Ram_Ip}_VS_0_PBcfg.h as 1-byte
 # empty stubs inside S32CT_GENERATED_DIR/generate/include. The matching
 # *_Cfg.h files do '#include "X_VS_0_PBcfg.h"' (quoted form, which prefers
