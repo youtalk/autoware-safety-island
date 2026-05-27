@@ -14,6 +14,11 @@ if [ ! -x build-freertos/cdds_host_out/bin/idlc ]; then
     exit 1
 fi
 
+# FREERTOS_PATH and LWIP_PATH point CycloneDDS's WITH_FREERTOS/WITH_LWIP
+# backends at the NXP-supplied headers.
+: "${FREERTOS_PATH:?Set FREERTOS_PATH}"
+: "${LWIP_PATH:?Set LWIP_PATH}"
+
 rm -rf build-s32z2/cdds_target
 cmake -S cyclonedds -B build-s32z2/cdds_target \
     -DCMAKE_TOOLCHAIN_FILE="${REPO_ROOT}/actuation_module/freertos_s32z2/cmake/arm-cortex-r52.cmake" \
@@ -26,7 +31,11 @@ cmake -S cyclonedds -B build-s32z2/cdds_target \
     -DENABLE_SSL=OFF \
     -DENABLE_SHM=OFF \
     -DENABLE_IPV6=OFF \
+    -DENABLE_SSM=OFF \
     -DENABLE_NETWORK_PARTITIONS=OFF \
+    -DWITH_FREERTOS=ON \
+    -DWITH_LWIP=ON \
+    -DCMAKE_C_FLAGS="-I${FREERTOS_PATH}/Source/include -I${FREERTOS_PATH}/Source/portable/GCC/ARM_CR52_GIC -I${LWIP_PATH}/lwip/src/include -I${REPO_ROOT}/actuation_module/include/platform/freertos/s32z2" \
     -DCMAKE_INSTALL_PREFIX="${REPO_ROOT}/build-s32z2/cdds_target_out" \
     -DCMAKE_BUILD_TYPE=Release
 
