@@ -202,6 +202,30 @@ target_sources(actuation_freertos_s32z2 PRIVATE
     ${S32Z2_FREERTOS_PORT_DIR}/port.c
 )
 
+# ---- FreeRTOS-Plus-POSIX (pthread/mutex/clock wrappers) ----
+# common/logger, common/node, common/can use POSIX pthread directly; on the
+# POSIX simulator that resolves to glibc, on baremetal we provide the
+# Plus-POSIX wrappers over xSemaphore / xTaskCreate.
+set(FREERTOS_POSIX_DIR ${REPO_ROOT}/freertos-plus-posix)
+if(NOT EXISTS ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/source/FreeRTOS_POSIX_pthread.c)
+    message(FATAL_ERROR
+        "freertos-plus-posix submodule not initialised. Run "
+        "'git submodule update --init --recursive' from the repo root.")
+endif()
+file(GLOB _freertos_posix_src
+    ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/source/*.c
+)
+target_sources(actuation_freertos_s32z2 PRIVATE ${_freertos_posix_src})
+# Public pthread.h etc. live in include/FreeRTOS_POSIX/; putting that dir on
+# the search path is what makes the common/ code's `#include <pthread.h>`
+# resolve to the Plus-POSIX header instead of newlib's missing one.
+target_include_directories(actuation_freertos_s32z2 PRIVATE
+    ${FREERTOS_POSIX_DIR}/include/FreeRTOS_POSIX
+    ${FREERTOS_POSIX_DIR}/include
+    ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include
+    ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include/portable
+)
+
 # ---- lwIP (from NXP TCP/IP Stack package) ----
 find_path(LWIP_DIR
     NAMES src/api/sockets.c
