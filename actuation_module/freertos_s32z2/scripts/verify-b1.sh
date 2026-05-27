@@ -1,25 +1,51 @@
 #!/usr/bin/env bash
 # Run on the development host.
-# Build, flash, and validate the B-1 bring-up.
+# Build, flash, and validate the B-1 bring-up on the X-S32Z27X-DC kit.
 set -euo pipefail
 
 : "${S32_RTD_PATH:?Set S32_RTD_PATH to the extracted NXP RTD root}"
-: "${WEST_FLASH_RUNNER:?Set WEST_FLASH_RUNNER (e.g. pyocd, openocd)}"
+: "${FREERTOS_PATH:?Set FREERTOS_PATH to the extracted NXP FreeRTOS module root}"
+: "${LWIP_PATH:?Set LWIP_PATH to the extracted NXP TCP/IP Stack root}"
+: "${S32DS_PATH:=/usr/local/NXP/S32DS.3.6.2}"
+: "${ZEPHYR_VENV:=$HOME/zephyr-env}"
+: "${UART_DEV:=/dev/ttyUSB0}"
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "${REPO_ROOT}"
 
+# shellcheck source=/dev/null
+source "${ZEPHYR_VENV}/bin/activate"
+
 rm -rf build-s32z2
 cmake -S actuation_module/freertos_s32z2 -B build-s32z2 \
-    -DCMAKE_TOOLCHAIN_FILE=actuation_module/freertos_s32z2/cmake/arm-cortex-r52.cmake
+    -DCMAKE_TOOLCHAIN_FILE="${REPO_ROOT}/actuation_module/freertos_s32z2/cmake/arm-cortex-r52.cmake"
 cmake --build build-s32z2 -j
-
-west flash --runner "${WEST_FLASH_RUNNER}" \
-    --elf-file build-s32z2/actuation_freertos_s32z2.elf
 
 LOG=/tmp/freertos-s32z2-b1-uart.log
 rm -f "${LOG}"
-timeout 10s tio -b 115200 /dev/ttyACM0 2>/dev/null | tee "${LOG}" || true
+
+# Capture UART9 in the background while west loads the ELF non-interactively.
+( timeout 30s cat "${UART_DEV}" >"${LOG}" 2>&1 ) &
+UART_PID=$!
+trap 'kill ${UART_PID} 2>/dev/null || true' EXIT
+
+# nxp_s32dbg only supports `debug`; --batch makes the GDB session non-interactive.
+# Retries up to 3x with the cleanup recipe from ces2026-demo.md §6.4 between
+# attempts.
+attempt=0
+until west debug --s32ds-path="${S32DS_PATH}" -d build-s32z2 --tool-opt='--batch'; do
+    attempt=$((attempt+1))
+    if [ "${attempt}" -ge 3 ]; then
+        echo "west debug failed 3 times; physical layer (power / J6 JTAG / J14 / J17-J18 / S2)?"
+        exit 2
+    fi
+    pkill -9 -f 'gta|s32dbg|arm-none-eabi-gdb' 2>/dev/null || true
+    rm -rf /tmp/*nxp_s32dbg* /tmp/tmp*nxp_s32dbg* 2>/dev/null || true
+    sleep 5
+done
+
+# Let UART capture finish (the timeout above bounds it).
+wait "${UART_PID}" 2>/dev/null || true
 
 grep -F "FreeRTOS on S32Z2 starting" "${LOG}"
 count=$(grep -cF "actuation alive ticks=" "${LOG}")
