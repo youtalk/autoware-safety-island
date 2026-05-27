@@ -264,6 +264,8 @@ file(GLOB _lwip_core
 target_sources(actuation_freertos_s32z2 PRIVATE ${_lwip_core})
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${LWIP_DIR}/src/include
+    # NXP-supplied arch/cc.h for the GCC port (USING_RTD branch)
+    ${LWIP_PATH}/code/ports/platform/generic/gcc/setting
 )
 
 # ---- NXP NETC <-> lwIP glue (eth_port.c) and RTD NETC driver ----
