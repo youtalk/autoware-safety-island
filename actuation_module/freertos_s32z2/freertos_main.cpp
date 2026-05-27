@@ -12,7 +12,9 @@
 #include "platform/freertos/s32z2/board_init.h"
 #include "platform/platform_network.h"
 
-extern "C" int actuation_main(void);   // renamed from main() via -Dmain=actuation_main
+// Renamed from main() via -Dmain=actuation_main. Declared with C++ linkage
+// because main.cpp compiles as C++ and the rename inherits that linkage.
+int actuation_main(void);
 
 static void actuation_task(void *pvParameters) {
     (void)pvParameters;
