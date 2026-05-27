@@ -129,13 +129,22 @@ Flash workflow
 --------------
 
 The kit is flashed via the NXP ``s32dbg`` debugger through ``west debug``
-(the ``nxp_s32dbg`` runner does not implement the ``flash`` command). This
-matches the CES 2026 MCO demo's ``west_debug.sh`` wrapper. From inside a
-Zephyr workspace whose ``runners.yaml`` selects ``nxp_s32dbg`` (the
-``s32z270dc2_rtu0_r52@D`` board config already does):
+(the ``nxp_s32dbg`` runner does not implement the ``flash`` command). The
+authoritative driver scripts live in ``~/youtalk/autoware-safety-island/MRM_repo/``
+on the AMD dev host (this is the copy that ran on the 7StarLake AV400
+production rig; the ``~/oz/`` copy is supporting). ``MRM_repo/run_before.sh``
+STEP 4 starts an Xvfb on ``DISPLAY=:99`` before STEP 5 invokes
+``west_debug.sh`` — ``s32dbg`` is a GUI tool that aborts at SoC connect
+with ``CCS: connection to server refused`` when no X display is
+available, even in batch mode. From inside a Zephyr workspace whose
+``runners.yaml`` selects ``nxp_s32dbg`` (the ``s32z270dc2_rtu0_r52@D``
+board config does):
 
 .. code-block:: bash
 
+    export DISPLAY=:99
+    pgrep -x Xvfb >/dev/null || \\
+        nohup Xvfb :99 -screen 0 1024x768x24 > /tmp/xvfb.log 2>&1 &
     source ~/zephyr-env/bin/activate
     west debug \\
         --s32ds-path=/usr/local/NXP/S32DS.3.6.2 \\
@@ -144,11 +153,14 @@ Zephyr workspace whose ``runners.yaml`` selects ``nxp_s32dbg`` (the
 
 The ``--tool-opt='--batch'`` flag makes the GDB session non-interactive so
 the firmware is loaded, the entry breakpoint is released, and control
-returns to the shell after the kit starts running.
+returns to the shell after the kit starts running. A successful run loads
+roughly 1.2 MB in 6 s and shortly afterwards ``/dev/ttyUSB0`` prints
+``Starting Controller Node...``, ``Controller Node Started`` and
+``Actuation Safety Island is Live``.
 
-When the SoC connection fails with ``CCS: connection to server refused``,
-clean up residual debugger state per the demo's retry recipe
-(``pkill -9 -f 'gta|s32dbg|arm-none-eabi-gdb'``,
+When the SoC connection still fails after Xvfb is up, clean up residual
+debugger state per the demo's retry recipe
+(``pkill -9 -f '(gta|s32dbg|arm-none-eabi-gdb)'``,
 ``rm -rf /tmp/*nxp_s32dbg*``, free TCP/45000) and retry. If three retries
 fail, the SoC is unreachable for physical reasons: power, J6 JTAG seating,
 J14 jumper, J17/J18 boot mode, or the front-panel S2 reset.

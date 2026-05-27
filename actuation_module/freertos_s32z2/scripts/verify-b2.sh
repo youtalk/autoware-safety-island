@@ -9,9 +9,18 @@ set -euo pipefail
 : "${S32DS_PATH:=/usr/local/NXP/S32DS.3.6.2}"
 : "${ZEPHYR_VENV:=$HOME/zephyr-env}"
 : "${UART_DEV:=/dev/ttyUSB0}"
+: "${DISPLAY:=:99}"
+: "${XVFB_ARGS:=-screen 0 1024x768x24}"
+export DISPLAY
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cd "${REPO_ROOT}"
+
+# s32dbg needs an X display; start a headless Xvfb if one isn't already up.
+if ! pgrep -x Xvfb >/dev/null 2>&1; then
+    nohup Xvfb "${DISPLAY}" ${XVFB_ARGS} > /tmp/xvfb.log 2>&1 &
+    sleep 1
+fi
 
 # shellcheck source=/dev/null
 source "${ZEPHYR_VENV}/bin/activate"

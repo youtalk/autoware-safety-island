@@ -143,9 +143,16 @@ the static `libddsc.a` consumed by the main target:
 
 The NXP `nxp_s32dbg` west runner supports **debug**, not `flash`. Use
 `west debug` with the `--batch` GDB option to load + run the ELF non-
-interactively. This matches the CES 2026 demo's `west_debug.sh` workflow.
+interactively. This matches the CES 2026 demo's `west_debug.sh` workflow
+(authoritative copy at `~/youtalk/autoware-safety-island/MRM_repo/` on
+the AMD dev host).
 
 ```bash
+# s32dbg is a GUI tool; it needs an X display even in batch mode.
+export DISPLAY=:99
+pgrep -x Xvfb >/dev/null || \
+    nohup Xvfb :99 -screen 0 1024x768x24 > /tmp/xvfb.log 2>&1 &
+
 source ~/zephyr-env/bin/activate
 west debug \
     --s32ds-path=/usr/local/NXP/S32DS.3.6.2 \
@@ -156,6 +163,12 @@ west debug \
 The `--s32ds-path` argument points to the S32 Design Studio install; the
 runner shells out to the bundled `S32Debugger` Python scripts and
 `arm-none-eabi-gdb-py`.
+
+**Without `DISPLAY=:99` + Xvfb, `west debug` fails with**
+`Target connection failed ... CCS: connection to server refused`. The
+production `run_before.sh` / `run_after.sh` in `MRM_repo` start Xvfb
+themselves in their STEP 4; if running the verify scripts standalone,
+they handle the Xvfb bootstrap.
 
 ### Demo doc retry recipe
 
