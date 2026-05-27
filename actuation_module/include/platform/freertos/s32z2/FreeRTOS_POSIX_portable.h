@@ -5,18 +5,23 @@
 // Included from FreeRTOS_POSIX.h before FreeRTOS_POSIX_portable_default.h,
 // so anything left undefined here picks up the upstream default.
 //
-// On bare-metal arm-none-eabi we run with newlib, which already exposes
-// time_t / clock_t / clockid_t / struct timespec / errno / etc. via
-// <sys/types.h>, <time.h>, <errno.h>. If Plus-POSIX also defines those
-// (its int64_t time_t collides with newlib's long time_t, and a second
-// struct timespec is a redefinition) the firmware does not compile.
-// Pre-include the relevant newlib headers, then disable the Plus-POSIX
-// duplicates so Plus-POSIX's own internals defer to the newlib versions.
+// On bare-metal arm-none-eabi we run with newlib. newlib's <sys/types.h>
+// transitively pulls in <sys/_pthreadtypes.h> and <sys/sched.h>, which
+// declare pthread_t / pthread_mutex_t / struct sched_param. Plus-POSIX
+// must own those types (PTHREAD_MUTEX_INITIALIZER's expansion is a struct
+// literal that targets Plus-POSIX's pthread_mutex_internal_t, not the
+// opaque newlib long-unsigned-int). The build pre-defines the newlib
+// include guards _SYS__PTHREADTYPES_H_ and _SYS_SCHED_H_ globally so
+// newlib's pthread / sched headers become empty wherever they are pulled
+// in (e.g. via <chrono> -> <time.h>), letting Plus-POSIX's typedefs win.
+//
+// For everything newlib already exposes that does NOT conflict — time_t,
+// clock_t, clockid_t, struct timespec, errno values — disable the
+// Plus-POSIX duplicates so its own internals defer to newlib.
 
 #ifndef PLATFORM_FREERTOS_S32Z2_FREERTOS_POSIX_PORTABLE_H_
 #define PLATFORM_FREERTOS_S32Z2_FREERTOS_POSIX_PORTABLE_H_
 
-#include <sys/types.h>
 #include <time.h>
 #include <errno.h>
 

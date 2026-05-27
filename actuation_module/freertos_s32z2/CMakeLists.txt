@@ -132,6 +132,12 @@ configure_file(
 # ---- Platform definitions ----
 add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 
+# Suppress newlib's <sys/_pthreadtypes.h> and <sys/sched.h> bodies so
+# Plus-POSIX's pthread_t / pthread_mutex_t / struct sched_param win against
+# newlib's opaque versions. <time.h> / <chrono> transitively include those
+# files, so the guard has to be defined globally rather than locally.
+add_compile_definitions(_SYS__PTHREADTYPES_H_=1 _SYS_SCHED_H_=1)
+
 # ---- Application executable ----
 # startup.s / linker_ram_r52.ld are NXP Confidential and Proprietary; they are
 # referenced in-place from the extracted FreeRTOS example and never copied
