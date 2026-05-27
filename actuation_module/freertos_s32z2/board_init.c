@@ -9,6 +9,7 @@
 
 #include "platform/freertos/s32z2/board_init.h"
 
+#include "Clock_Ip.h"
 #include "Siul2_Port_Ip.h"
 #include "Linflexd_Uart_Ip.h"
 #include "Linflexd_Uart_Ip_VS_0_PBcfg.h"
@@ -17,9 +18,13 @@
 // Port_Cfg.c / Platform_Cfg.c — those PB configs are absent from the lwip
 // S32CT example (Components view does not instantiate them), so the build
 // filters them out. The NXP startup.s + SystemInit handle MCU bring-up
-// before main(), and the IP-layer Siul2_Port_Ip_PinInit /
-// Linflexd_Uart_Ip_Init calls below cover the one pin + UART instance we
-// actually need for the console.
+// before main(); we still need the IP-layer Clock_Ip_Init below to enable
+// the LINFLEXD9 module clock that SystemInit does not touch.
+
+// Clock_Ip_aClockConfig[] is defined in Clock_Ip_VS_0_PBcfg.c (S32CT
+// generated). Element 0 is the default ClockConfig0 that turns the
+// LINFLEXD9 module clock on.
+extern const Clock_Ip_ClockConfigType Clock_Ip_aClockConfig[];
 
 // LINFLEXD instance 9 is wired to the X-S32Z27X-DC FT232RQ console
 // (matches the Zephyr `_D` overlay's `zephyr,console = &uart9`).
@@ -59,6 +64,7 @@ int uart9_tx_byte(uint8_t b) {
 }
 
 int board_init(void) {
+    (void)Clock_Ip_Init(&Clock_Ip_aClockConfig[0U]);
     uart9_init_115200_8N1();
     return 0;
 }

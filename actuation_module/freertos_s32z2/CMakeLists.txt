@@ -347,6 +347,24 @@ file(GLOB _rtd_support_sources
     # Siul2_Port_Ip.c provides the IP-layer Siul2_Port_Ip_PinInit()
     # board_init.c uses to mux PORT150 → ALT1 → LIN_9_TX.
     ${S32_RTD_PATH}/RTD/Port_TS_T31D53M20I1R0/src/Siul2_Port_Ip.c
+    # Clock_Ip*.c — needed by Clock_Ip_Init() in board_init.c so the
+    # LINFLEXD9 module clock is actually enabled before uart9_init.
+    # SystemInit alone doesn't touch the LINFLEXD clock tree.
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Data.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Divider.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_DividerTrigger.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_ExtOsc.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_FracDiv.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Frequency.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Gate.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_IntOsc.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Irq.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Monitor.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Pll.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_ProgFreqSwitch.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Selector.c
+    ${S32_RTD_PATH}/RTD/Mcu_TS_T31D53M20I1R0/src/Clock_Ip_Specific.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_rtd_support_sources})
 
