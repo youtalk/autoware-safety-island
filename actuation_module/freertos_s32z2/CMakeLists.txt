@@ -222,6 +222,7 @@ target_sources(actuation_freertos_s32z2 PRIVATE ${_freertos_posix_src})
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${FREERTOS_POSIX_DIR}/include/FreeRTOS_POSIX
     ${FREERTOS_POSIX_DIR}/include
+    ${FREERTOS_POSIX_DIR}/include/private
     ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include
     ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include/portable
 )
