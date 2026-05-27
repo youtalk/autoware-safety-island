@@ -74,7 +74,31 @@ Expected last line: `B-1 verification OK (N heartbeats)`.
 
 ## Verify B-2
 
-See B-2 PR. (Section added by Task 18.)
+Prerequisite: a DHCP server reachable by the kit's Ethernet 0. If the LAN has
+no DHCP, stand one up on the development host:
+
+```bash
+sudo apt install dnsmasq
+sudo dnsmasq --interface=<your-NIC> --dhcp-range=192.168.50.100,192.168.50.150,1h \
+             --bind-interfaces --no-daemon
+```
+
+Then run the verification:
+
+```bash
+S32_RTD_PATH=/opt/nxp/RTD_<version> \
+WEST_FLASH_RUNNER=<runner> \
+  ./actuation_module/freertos_s32z2/scripts/verify-b2.sh
+```
+
+Expected last line: `B-2 verification OK`.
+
+Three captured logs land under `/tmp/`:
+- `/tmp/freertos-s32z2-b2-uart.log` — kit UART9 timeline
+- `/tmp/freertos-s32z2-b2-edge-pub.log` — host-side publisher
+- `/tmp/freertos-s32z2-b2-edge-sub.log` — host-side subscriber
+
+Attach all three to the B-2 PR body.
 
 ## Resolved RTD paths
 

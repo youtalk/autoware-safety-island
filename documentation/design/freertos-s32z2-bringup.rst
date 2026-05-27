@@ -54,7 +54,30 @@ seconds of reset.
 Networking and DDS (B-2)
 ------------------------
 
-(Filled in by Task 18.)
+``configure_network()`` is selected at compile time by the dispatcher branch
+in ``platform_network.h`` and dispatches to ``lwip_bring_up_blocking()`` from
+``include/platform/freertos/s32z2/freertos_network.h``. ``lwip_bring_up_blocking``
+calls ``tcpip_init()``, registers the NETC driver via ``ethernetif_init`` /
+``netif_add``, requests DHCP, and blocks on a semaphore until a lease arrives
+(30 s timeout).
+
+CycloneDDS is cross-compiled as a static library for Cortex-R52 with security,
+SSL, shared memory, and IPv6 disabled (see
+``actuation_module/freertos_s32z2/scripts/build-cdds-target.sh``). The host
+``idlc`` from the POSIX-simulator phase 1 build is reused for IDL → C
+generation of ``autoware_msgs``.
+
+The Edge ECU peer is the development host itself: ``dds_pub`` and ``dds_sub``
+(unchanged) compile with host gcc against the host CycloneDDS and run as
+``edge_ecu_pub`` / ``edge_ecu_sub``. The acceptance gates are:
+
+- ``Controller Node Started`` and ``Actuation Safety Island is Live`` appear
+  on UART9.
+- ``edge_ecu_sub`` receives ``STEERING REPORT`` at least twice.
+- ``actuation_main`` does not return during the verification window.
+
+These are the same string markers used by the POSIX-simulator smoke
+(PRs #10 / #13).
 
 References
 ----------
