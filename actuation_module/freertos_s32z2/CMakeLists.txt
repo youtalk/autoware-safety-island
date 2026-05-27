@@ -22,6 +22,11 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Mirror the POSIX FreeRTOS build's anchor variable so actuation_core.cmake
+# and the autoware component .cmake files resolve their relative paths.
+set(ACTUATION_DIR ${CMAKE_CURRENT_SOURCE_DIR}/..)
+set(REPO_ROOT ${ACTUATION_DIR}/..)
+
 # ---- NXP package locations (three roots) ----
 foreach(_var IN ITEMS S32_RTD_PATH FREERTOS_PATH LWIP_PATH)
     if(NOT DEFINED ENV{${_var}})
