@@ -23,7 +23,10 @@
 #define configIDLE_SHOULD_YIELD             1
 #define configUSE_TIME_SLICING              1
 
-#define configTOTAL_HEAP_SIZE               ((size_t)(16U * 1024U * 1024U))
+// 512KB total kernel heap. S32Z2's int_sram_dram (where .bss/.sram_data
+// land) is only 512KB; leaving headroom for the static FreeRTOS objects,
+// task stacks, and CycloneDDS buffers.
+#define configTOTAL_HEAP_SIZE               ((size_t)(192U * 1024U))
 #define configSUPPORT_STATIC_ALLOCATION     1
 #define configSUPPORT_DYNAMIC_ALLOCATION    1
 #define configAPPLICATION_ALLOCATED_HEAP    0

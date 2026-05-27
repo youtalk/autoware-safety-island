@@ -23,22 +23,17 @@
 // ever needs the symbol to exist.
 void *__dso_handle = (void *)0;
 
+// _close, _fstat, _isatty, _lseek, _read, _kill, _getpid, _write are
+// implemented in board_init.c (UART-routed console + EBADF stubs).
+
 void _exit(int status)
 {
     (void)status;
     for (;;) {}
 }
 
-int _close(int fd) { (void)fd; errno = EBADF; return -1; }
-int _fstat(int fd, struct stat *st) { (void)fd; (void)st; errno = EBADF; return -1; }
-int _isatty(int fd) { (void)fd; return 1; }
-int _lseek(int fd, off_t off, int whence) { (void)fd; (void)off; (void)whence; errno = EBADF; return -1; }
 int _open(const char *path, int flags, int mode) { (void)path; (void)flags; (void)mode; errno = ENOENT; return -1; }
-int _read(int fd, void *buf, size_t n) { (void)fd; (void)buf; (void)n; return 0; }
-int _kill(int pid, int sig) { (void)pid; (void)sig; errno = EINVAL; return -1; }
-int _getpid(void) { return 1; }
 int _gettimeofday(struct timeval *tv, void *tz) { (void)tv; (void)tz; errno = ENOSYS; return -1; }
-int _write(int fd, const void *buf, size_t n);  // implemented in board_init.c (UART9)
 
 // Tiny static heap for any incidental newlib malloc (FreeRTOS code uses
 // pvPortMalloc + heap_4, so this just covers stragglers like libc internals).
