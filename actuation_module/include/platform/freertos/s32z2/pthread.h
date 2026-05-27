@@ -23,6 +23,12 @@
 
 #include <stddef.h>
 #include <stdint.h>
+// newlib's <sys/_pthreadtypes.h> uses clock_t for one of its struct members.
+// Pull <time.h> in first so that typedef is in scope; otherwise the include
+// fails with "'clock_t' does not name a type".
+#include <time.h>
+// Match newlib's <unistd.h> declaration of usleep(useconds_t).
+#include <sys/types.h>
 #include <sys/_pthreadtypes.h>
 
 #include "FreeRTOS.h"
@@ -189,7 +195,9 @@ static inline int pthread_cancel(pthread_t thread)
     return 0;
 }
 
-static inline int usleep(unsigned int useconds)
+// useconds_t comes from newlib's <sys/types.h>; matches the prototype in
+// newlib's <unistd.h> so the C++ overload resolution sees one declaration.
+static inline int usleep(useconds_t useconds)
 {
     if (useconds == 0) {
         taskYIELD();

@@ -33,12 +33,6 @@ static struct ddsi_config_network_interface_listelem cfg_iface
   }
 };
 
-static struct ddsi_config_ignoredpartition_listelem cfg_ignoredpartition
-{
-  nullptr,
-  const_cast<char *>("*.*")
-};
-
 /**
  * @brief Initialize a given DDS configuration structure.
  * @param[out] cfg Configuration structure that will be filled.
@@ -61,8 +55,6 @@ inline static void init_config(struct ddsi_config & cfg)
   cfg.network_interfaces = &cfg_iface;
 
   // cfg.enable_topic_discovery_endpoints = DDSI_BOOLDEF_FALSE;
-
-  // cfg.ignoredPartitions = &cfg_ignoredpartition;
 
   // Processing
   cfg.retransmit_merging = DDSI_REXMIT_MERGE_ALWAYS;

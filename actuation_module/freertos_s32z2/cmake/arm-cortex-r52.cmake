@@ -17,7 +17,9 @@ set(_S32Z2_CFLAGS
 string(REPLACE ";" "" _S32Z2_CFLAGS "${_S32Z2_CFLAGS}")
 
 set(CMAKE_C_FLAGS_INIT "${_S32Z2_CFLAGS}")
-set(CMAKE_CXX_FLAGS_INIT "${_S32Z2_CFLAGS} -fno-rtti -fno-exceptions")
+# Project mandates "C++17 with exceptions and RTTI enabled" (CLAUDE.md).
+# The Autoware controller and CycloneDDS bindings use both.
+set(CMAKE_CXX_FLAGS_INIT "${_S32Z2_CFLAGS} -fexceptions -frtti")
 set(CMAKE_ASM_FLAGS_INIT "${_S32Z2_CFLAGS}")
 set(CMAKE_EXE_LINKER_FLAGS_INIT "-Wl,--gc-sections -nostartfiles")
 
