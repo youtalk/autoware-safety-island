@@ -205,11 +205,22 @@ target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/include
 )
 
-# Pull all generated PB/Cfg sources into the target. The Mcu_VS_0_PBcfg.c is
-# an empty placeholder in the lwip example variant so glob-include is fine.
+# Pull generated PB/Cfg sources into the target.
+#
+# The lwip example doesn't include Mcu / Power_Ip / Ram_Ip component
+# instances, so S32CT leaves their VS_0_PBcfg.{c,h} as 1-byte stubs and
+# their _Cfg.c files reference symbols that depend on missing config
+# (failing with MCAL_ENABLE_USER_MODE_SUPPORT-style sentinel errors).
+# Exclude both layers from the build; the matching _Cfg.h sentinel checks
+# are satisfied by pbcfg_shims/ via -imacros above. The runtime impact is
+# that low-level MCU/Power/Ram bring-up happens via the NXP-provided
+# startup code in the FreeRTOS example, not via the AUTOSAR Mcu/Power/Ram
+# drivers.
 file(GLOB _s32ct_generated_src
     ${S32CT_GENERATED_DIR}/generate/src/*.c
     ${S32CT_GENERATED_DIR}/board/*.c)
+list(FILTER _s32ct_generated_src EXCLUDE REGEX
+    "/(Mcu_Cfg|Mcu_VS_0_PBcfg|Power_Ip_Cfg|Power_Ip_VS_0_PBcfg|Ram_Ip_Cfg|Ram_Ip_VS_0_PBcfg)\\.c$")
 target_sources(actuation_freertos_s32z2 PRIVATE ${_s32ct_generated_src})
 
 set_target_properties(actuation_freertos_s32z2 PROPERTIES SUFFIX ".elf")
