@@ -15,9 +15,14 @@ if [ ! -x build-freertos/cdds_host_out/bin/idlc ]; then
 fi
 
 # FREERTOS_PATH and LWIP_PATH point CycloneDDS's WITH_FREERTOS/WITH_LWIP
-# backends at the NXP-supplied headers.
+# backends at the NXP-supplied headers. S32_RTD_PATH provides the AUTOSAR
+# base headers (Compiler.h, Std_Types.h) that lwIP's NXP arch/cc.h pulls in
+# transitively through Devassert.h. S32CT_GENERATED_DIR provides the
+# project-specific Platform_Types.h / Soc_Ips.h emitted by S32 Config Tools.
 : "${FREERTOS_PATH:?Set FREERTOS_PATH}"
 : "${LWIP_PATH:?Set LWIP_PATH}"
+: "${S32_RTD_PATH:?Set S32_RTD_PATH}"
+: "${S32CT_GENERATED_DIR:?Set S32CT_GENERATED_DIR to your S32 Config Tools project root}"
 
 rm -rf build-s32z2/cdds_target
 cmake -S cyclonedds -B build-s32z2/cdds_target \
@@ -35,7 +40,7 @@ cmake -S cyclonedds -B build-s32z2/cdds_target \
     -DENABLE_NETWORK_PARTITIONS=OFF \
     -DWITH_FREERTOS=ON \
     -DWITH_LWIP=ON \
-    -DCMAKE_C_FLAGS="-D__int64_t_defined=1 -DUSING_RTD=1 -DS32Z27 -include inttypes.h -I${FREERTOS_PATH}/Source/include -I${FREERTOS_PATH}/Source/portable/GCC/ARM_CR52_GIC -I${LWIP_PATH}/lwip/src/include -I${LWIP_PATH}/code/ports/platform/generic/gcc/setting -I${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/include -I${REPO_ROOT}/actuation_module/include/platform/freertos/s32z2" \
+    -DCMAKE_C_FLAGS="-D__int64_t_defined=1 -DUSING_RTD=1 -DS32Z27 -include inttypes.h -I${FREERTOS_PATH}/Source/include -I${FREERTOS_PATH}/Source/portable/GCC/ARM_CR52_GIC -I${LWIP_PATH}/lwip/src/include -I${LWIP_PATH}/code/ports/platform/generic/gcc/setting -I${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/include -I${S32CT_GENERATED_DIR}/generate/include -I${REPO_ROOT}/actuation_module/include/platform/freertos/s32z2" \
     -DCMAKE_INSTALL_PREFIX="${REPO_ROOT}/build-s32z2/cdds_target_out" \
     -DCMAKE_BUILD_TYPE=Release
 
