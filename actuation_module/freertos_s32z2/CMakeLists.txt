@@ -127,3 +127,63 @@ target_sources(actuation_freertos_s32z2 PRIVATE ${_netc_sources})
 target_sources(actuation_freertos_s32z2 PRIVATE
     lwip_bringup.c
 )
+
+# ---- Pre-built CycloneDDS target library ----
+set(CDDS_HOST_PREFIX   ${CMAKE_SOURCE_DIR}/../../build-freertos/cdds_host_out CACHE PATH "")
+set(CDDS_TARGET_PREFIX ${CMAKE_SOURCE_DIR}/../../build-s32z2/cdds_target_out CACHE PATH "")
+
+if(NOT EXISTS ${CDDS_HOST_PREFIX}/bin/idlc)
+    message(FATAL_ERROR
+        "Host idlc not found at ${CDDS_HOST_PREFIX}/bin/idlc. "
+        "Run the FreeRTOS POSIX simulator phase 1 build first.")
+endif()
+if(NOT EXISTS ${CDDS_TARGET_PREFIX}/lib/libddsc.a)
+    message(FATAL_ERROR
+        "Cross-built CycloneDDS not found at ${CDDS_TARGET_PREFIX}/lib/libddsc.a. "
+        "Run actuation_module/freertos_s32z2/scripts/build-cdds-target.sh first.")
+endif()
+
+add_library(cdds STATIC IMPORTED GLOBAL)
+set_target_properties(cdds PROPERTIES
+    IMPORTED_LOCATION ${CDDS_TARGET_PREFIX}/lib/libddsc.a)
+
+set(CYCLONEDDS_INCLUDE_DIR ${CDDS_TARGET_PREFIX}/include)
+
+# Expose host idlc on PATH so autoware_msgs configure finds it.
+set(ENV{PATH}            "${CDDS_HOST_PREFIX}/bin:$ENV{PATH}")
+set(ENV{LD_LIBRARY_PATH} "${CDDS_HOST_PREFIX}/lib:$ENV{LD_LIBRARY_PATH}")
+set(CycloneDDS_DIR ${CDDS_HOST_PREFIX}/lib/cmake/CycloneDDS)
+
+# ---- Eigen3 (host package, header-only) ----
+find_package(Eigen3 REQUIRED)
+
+# ---- Autoware Messages (IDL → C via host idlc) ----
+add_subdirectory(${CMAKE_SOURCE_DIR}/../src/autoware/autoware_msgs
+                 ${CMAKE_CURRENT_BINARY_DIR}/autoware_msgs)
+
+# ---- Autoware controller core (shared with POSIX simulator) ----
+include(${CMAKE_SOURCE_DIR}/../cmake/actuation_core.cmake)
+
+# Rename actuation src main() to actuation_main(); the FreeRTOS wrapper
+# provides the real main() in freertos_main.cpp.
+add_compile_definitions(main=actuation_main)
+
+target_sources(actuation_freertos_s32z2 PRIVATE
+    ${ACTUATION_DIR}/src/main.cpp
+    ${APP_SOURCES}
+)
+
+# Undo the main rename for the FreeRTOS wrapper itself.
+set_source_files_properties(freertos_main.cpp PROPERTIES
+    COMPILE_DEFINITIONS "main=main"
+)
+
+target_include_directories(actuation_freertos_s32z2 PRIVATE
+    ${CYCLONEDDS_INCLUDE_DIR}
+    ${EIGEN3_INCLUDE_DIR}
+    ${APP_INCLUDE_DIRS}
+)
+target_link_libraries(actuation_freertos_s32z2 PRIVATE
+    cdds
+    autoware_msgs
+)
