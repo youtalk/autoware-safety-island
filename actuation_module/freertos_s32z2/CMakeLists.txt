@@ -132,12 +132,6 @@ configure_file(
 # ---- Platform definitions ----
 add_compile_definitions(PLATFORM_FREERTOS=1 PLATFORM_FREERTOS_S32Z2=1)
 
-# Suppress newlib's <sys/_pthreadtypes.h> and <sys/sched.h> bodies so
-# Plus-POSIX's pthread_t / pthread_mutex_t / struct sched_param win against
-# newlib's opaque versions. <time.h> / <chrono> transitively include those
-# files, so the guard has to be defined globally rather than locally.
-add_compile_definitions(_SYS__PTHREADTYPES_H_=1 _SYS_SCHED_H_=1)
-
 # ---- Application executable ----
 # startup.s / linker_ram_r52.ld are NXP Confidential and Proprietary; they are
 # referenced in-place from the extracted FreeRTOS example and never copied
@@ -219,32 +213,11 @@ target_sources(actuation_freertos_s32z2 PRIVATE
     ${S32Z2_FREERTOS_PORT_DIR}/port.c
 )
 
-# ---- FreeRTOS-Plus-POSIX (pthread/mutex/clock wrappers) ----
-# common/logger, common/node, common/can use POSIX pthread directly; on the
-# POSIX simulator that resolves to glibc, on baremetal we provide the
-# Plus-POSIX wrappers over xSemaphore / xTaskCreate.
-set(FREERTOS_POSIX_DIR ${REPO_ROOT}/freertos-plus-posix)
-if(NOT EXISTS ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/source/FreeRTOS_POSIX_pthread.c)
-    message(FATAL_ERROR
-        "freertos-plus-posix submodule not initialised. Run "
-        "'git submodule update --init --recursive' from the repo root.")
-endif()
-file(GLOB _freertos_posix_src
-    ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/source/*.c
-)
-target_sources(actuation_freertos_s32z2 PRIVATE ${_freertos_posix_src})
-# common/'s `#include <pthread.h>` is resolved by the wrapper at
+# common/'s `#include <pthread.h>` is resolved by the hand-rolled shim at
 # actuation_module/include/platform/freertos/s32z2/pthread.h (that path is
-# already first on the include search list). We deliberately do NOT add
-# include/FreeRTOS_POSIX here: doing so would shadow newlib's <time.h>,
-# <errno.h>, <ctime> with Plus-POSIX's stripped-down versions and break
-# <chrono> / logger.hpp.
-target_include_directories(actuation_freertos_s32z2 PRIVATE
-    ${FREERTOS_POSIX_DIR}/include
-    ${FREERTOS_POSIX_DIR}/include/private
-    ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include
-    ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include/portable
-)
+# already first on the include search list). The shim maps pthread_mutex_*
+# to FreeRTOS semaphores and pthread_create/join/cancel to xTaskCreate,
+# avoiding FreeRTOS-Plus-POSIX and its header layering problems.
 
 # ---- lwIP (from NXP TCP/IP Stack package) ----
 find_path(LWIP_DIR
