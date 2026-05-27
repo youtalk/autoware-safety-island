@@ -41,7 +41,7 @@ cmake -S cyclonedds -B build-s32z2/cdds_target \
     -DENABLE_LTO=OFF \
     -DWITH_FREERTOS=ON \
     -DWITH_LWIP=ON \
-    -DCMAKE_C_FLAGS="-D__int64_t_defined=1 -DUSING_RTD=1 -DS32Z27 -DLWIP_TIMEVAL_PRIVATE=0 -include inttypes.h -include sys/select.h -I${REPO_ROOT}/actuation_module/include/platform/freertos/s32z2 -I${FREERTOS_PATH}/Source/include -I${FREERTOS_PATH}/Source/portable/GCC/ARM_CR52_GIC -I${LWIP_PATH}/lwip/src/include -I${LWIP_PATH}/code/ports/platform/generic/gcc/setting -I${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/include -I${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/header -I${S32CT_GENERATED_DIR}/generate/include" \
+    -DCMAKE_C_FLAGS="-mcpu=cortex-r52 -mfpu=neon-fp-armv8 -mfloat-abi=hard -ffunction-sections -fdata-sections -fno-common -D__int64_t_defined=1 -DUSING_RTD=1 -DS32Z27 -DLWIP_TIMEVAL_PRIVATE=0 -include inttypes.h -include sys/select.h -I${REPO_ROOT}/actuation_module/include/platform/freertos/s32z2 -I${FREERTOS_PATH}/Source/include -I${FREERTOS_PATH}/Source/portable/GCC/ARM_CR52_GIC -I${LWIP_PATH}/lwip/src/include -I${LWIP_PATH}/code/ports/platform/generic/gcc/setting -I${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/include -I${S32_RTD_PATH}/RTD/BaseNXP_TS_T31D53M20I1R0/header -I${S32CT_GENERATED_DIR}/generate/include" \
     -DCMAKE_INSTALL_PREFIX="${REPO_ROOT}/build-s32z2/cdds_target_out" \
     -DCMAKE_BUILD_TYPE=Release
 
