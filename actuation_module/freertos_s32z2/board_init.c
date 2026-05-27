@@ -43,7 +43,6 @@ static const Siul2_Port_Ip_PinSettingsConfig kLin9TxPin = {
     .initValue                = 0U,
     .inputMuxReg              = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U },
     .inputMux                 = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U },
-    .pinPortInputMultiplexer  = 0U,
 };
 
 void uart9_init_115200_8N1(void) {
