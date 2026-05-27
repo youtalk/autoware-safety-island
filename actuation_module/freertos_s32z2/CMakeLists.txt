@@ -195,6 +195,11 @@ add_executable(actuation_freertos_s32z2
 
 target_link_options(actuation_freertos_s32z2 PRIVATE
     -T${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Linker_Files/linker_ram_r52.ld
+    # main.cpp is C++, so -Dmain=actuation_main produces the mangled symbol
+    # _Z14actuation_mainv. NXP's startup.s and freertos_main.cpp both call
+    # `actuation_main` unmangled; expose it as an alias so both reach the
+    # same function. Touching main.cpp would change POSIX/Zephyr symbols.
+    "-Wl,--defsym=actuation_main=_Z14actuation_mainv"
 )
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE

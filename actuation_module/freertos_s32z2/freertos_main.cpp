@@ -12,9 +12,10 @@
 #include "platform/freertos/s32z2/board_init.h"
 #include "platform/platform_network.h"
 
-// Renamed from main() via -Dmain=actuation_main. Declared with C++ linkage
-// because main.cpp compiles as C++ and the rename inherits that linkage.
-int actuation_main(void);
+// actuation_main is main.cpp's main() renamed via -Dmain=actuation_main.
+// CMake adds a -Wl,--defsym alias so the symbol is reachable under the
+// unmangled C name that NXP's startup.s expects.
+extern "C" int actuation_main(void);
 
 static void actuation_task(void *pvParameters) {
     (void)pvParameters;
