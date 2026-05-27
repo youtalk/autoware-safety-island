@@ -216,11 +216,13 @@ file(GLOB _freertos_posix_src
     ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/source/*.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_freertos_posix_src})
-# Public pthread.h etc. live in include/FreeRTOS_POSIX/; putting that dir on
-# the search path is what makes the common/ code's `#include <pthread.h>`
-# resolve to the Plus-POSIX header instead of newlib's missing one.
+# common/'s `#include <pthread.h>` is resolved by the wrapper at
+# actuation_module/include/platform/freertos/s32z2/pthread.h (that path is
+# already first on the include search list). We deliberately do NOT add
+# include/FreeRTOS_POSIX here: doing so would shadow newlib's <time.h>,
+# <errno.h>, <ctime> with Plus-POSIX's stripped-down versions and break
+# <chrono> / logger.hpp.
 target_include_directories(actuation_freertos_s32z2 PRIVATE
-    ${FREERTOS_POSIX_DIR}/include/FreeRTOS_POSIX
     ${FREERTOS_POSIX_DIR}/include
     ${FREERTOS_POSIX_DIR}/include/private
     ${FREERTOS_POSIX_DIR}/FreeRTOS-Plus-POSIX/include
