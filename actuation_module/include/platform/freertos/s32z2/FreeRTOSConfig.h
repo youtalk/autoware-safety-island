@@ -42,7 +42,10 @@
 #define configTASK_NOTIFICATION_ARRAY_ENTRIES 3
 
 #define configCHECK_FOR_STACK_OVERFLOW      2
-#define configUSE_TRACE_FACILITY            0
+// CycloneDDS' FreeRTOS port queries task state via uxTaskGetSystemState /
+// vTaskGetInfo / eTaskGetState (rusage, threads). Those require the trace
+// facility.
+#define configUSE_TRACE_FACILITY            1
 #define configGENERATE_RUN_TIME_STATS       0
 #define configUSE_CO_ROUTINES               0
 
@@ -69,6 +72,10 @@
 #define INCLUDE_xTaskGetCurrentTaskHandle   1
 #define INCLUDE_uxTaskGetStackHighWaterMark 0
 #define INCLUDE_xTimerPendFunctionCall      1
+// CycloneDDS' FreeRTOS port references these.
+#define INCLUDE_uxTaskPriorityGet           1
+#define INCLUDE_eTaskGetState               1
+#define INCLUDE_xTaskGetIdleTaskHandle      1
 
 // PIT-backed tick. board_init.c implements these.
 void s32z2_pit_setup_tick_interrupt(void);

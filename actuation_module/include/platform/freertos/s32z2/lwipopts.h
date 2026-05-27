@@ -36,6 +36,10 @@
 #define LWIP_SO_RCVBUF                  1
 #define SO_REUSE                        1
 
+// lwip_bringup.c calls netif_set_status_callback after dhcp_start so the
+// blocking bring-up returns as soon as DHCP hands us a lease.
+#define LWIP_NETIF_STATUS_CALLBACK      1
+
 // NXP's NETC <-> lwIP glue (code/ports/netif/ethif/rtd/generic/eth_port.c)
 // extends struct pbuf with a back-pointer to the NETC RX buffer so it can
 // hand it back to Eth_43_NETC_ProvideRxBuffer() when the pbuf is freed.

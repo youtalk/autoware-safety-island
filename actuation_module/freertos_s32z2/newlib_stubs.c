@@ -9,9 +9,19 @@
 // fails, etc.
 
 #include <errno.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
+
+#include "FreeRTOS.h"
+#include "task.h"
+
+// C++ ABI hook: __cxa_atexit stashes the per-translation-unit dso handle so
+// shared-object teardown can dispatch destructors. A bare-metal image only
+// ever needs the symbol to exist.
+void *__dso_handle = (void *)0;
 
 void _exit(int status)
 {
@@ -45,4 +55,43 @@ void *_sbrk(intptr_t incr)
     }
     brk += incr;
     return prev;
+}
+
+// POSIX sleep — main.cpp uses it for the DHCP startup delay. Implemented in
+// terms of vTaskDelay so we don't block the scheduler.
+unsigned int sleep(unsigned int seconds)
+{
+    vTaskDelay(pdMS_TO_TICKS(seconds * 1000U));
+    return 0;
+}
+
+// CycloneDDS' ddsrt_gethostname stringifies whatever this returns into the
+// participant's "hostname" field; the host name has no operational meaning
+// on the safety island.
+int gethostname(char *name, size_t len)
+{
+    if (name == NULL || len == 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    const char *id = "s32z2";
+    strncpy(name, id, len);
+    name[len - 1] = '\0';
+    return 0;
+}
+
+// CycloneDDS uses clock_gettime for wall-clock/monotonic readings. xTaskGetTickCount
+// is the only clock we have before SNTP runs, so derive both from it.
+int clock_gettime(clockid_t clk_id, struct timespec *tp)
+{
+    (void)clk_id;
+    if (tp == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    TickType_t ticks = xTaskGetTickCount();
+    uint64_t total_ms = (uint64_t)ticks * 1000U / (uint64_t)configTICK_RATE_HZ;
+    tp->tv_sec = (time_t)(total_ms / 1000U);
+    tp->tv_nsec = (long)((total_ms % 1000U) * 1000000U);
+    return 0;
 }
