@@ -20,11 +20,14 @@
 #define TCPIP_THREAD_PRIO               (12)   /* configMAX_PRIORITIES - 3 */
 #define DEFAULT_THREAD_STACKSIZE        4096
 
-#define MEM_SIZE                        (4 * 1024 * 1024)
-#define MEMP_NUM_TCP_PCB                16
-#define MEMP_NUM_UDP_PCB                16
-#define MEMP_NUM_PBUF                   64
-#define PBUF_POOL_SIZE                  64
+// S32Z2's int_sram_dram region is only 512 KB for all data; the lwIP heap
+// has to share it with the FreeRTOS kernel heap (configTOTAL_HEAP_SIZE),
+// initialised globals, and CycloneDDS buffers.
+#define MEM_SIZE                        (64 * 1024)
+#define MEMP_NUM_TCP_PCB                4
+#define MEMP_NUM_UDP_PCB                4
+#define MEMP_NUM_PBUF                   16
+#define PBUF_POOL_SIZE                  16
 
 #define LWIP_DHCP                       1
 #define LWIP_IGMP                       1   /* SPDP multicast */
