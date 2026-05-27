@@ -331,6 +331,16 @@ file(GLOB _rtd_support_sources
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_rtd_support_sources})
 
+# NXP-supplied default SchM_*.c implementations for the modules we link
+# against. SchM_Enter_*/SchM_Exit_*_EXCLUSIVE_AREA_* are AUTOSAR scheduler
+# critical-section hooks; in non-AUTOSAR FreeRTOS builds these defaults
+# wrap them as taskENTER_CRITICAL / taskEXIT_CRITICAL.
+target_sources(actuation_freertos_s32z2 PRIVATE
+    ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_Eth_43_NETC.c
+    ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_EthSwt_43_NETC.c
+    ${S32_RTD_PATH}/RTD/Rte_TS_T31D53M20I1R0/src/SchM_Uart.c
+)
+
 target_sources(actuation_freertos_s32z2 PRIVATE
     lwip_bringup.c
 )
