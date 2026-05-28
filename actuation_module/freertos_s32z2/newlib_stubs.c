@@ -11,6 +11,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -33,7 +34,26 @@ void _exit(int status)
 }
 
 int _open(const char *path, int flags, int mode) { (void)path; (void)flags; (void)mode; errno = ENOENT; return -1; }
-int _gettimeofday(struct timeval *tv, void *tz) { (void)tv; (void)tz; errno = ENOSYS; return -1; }
+
+// arm-none-eabi libstdc++ (13.2) builds std::chrono::system_clock AND
+// steady_clock on gettimeofday (_GLIBCXX_USE_CLOCK_REALTIME/MONOTONIC are
+// undefined, _GLIBCXX_USE_GETTIMEOFDAY=1), so Clock::now(), the periodic Timer,
+// and the logger timestamp all land here -- NOT in clock_gettime below. Leaving
+// *tv unfilled gave garbage/negative times (e.g. "[12:29:03.-87]"). Derive it
+// from the tick count like clock_gettime so the two agree.
+int _gettimeofday(struct timeval *tv, void *tz)
+{
+    (void)tz;
+    if (tv == NULL) {
+        errno = EFAULT;
+        return -1;
+    }
+    TickType_t ticks = xTaskGetTickCount();
+    uint64_t total_us = (uint64_t)ticks * 1000000U / (uint64_t)configTICK_RATE_HZ;
+    tv->tv_sec = (time_t)(total_us / 1000000U);
+    tv->tv_usec = (long)(total_us % 1000000U);
+    return 0;
+}
 
 // Tiny static heap for any incidental newlib malloc (FreeRTOS code uses
 // pvPortMalloc + heap_4, so this just covers stragglers like libc internals).
