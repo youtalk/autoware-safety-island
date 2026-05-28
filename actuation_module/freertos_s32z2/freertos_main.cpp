@@ -62,9 +62,19 @@ int main(void) {
     board_init();
     printf("FreeRTOS S32Z2 actuation starting...\n");
 
-    // 32768 stack words (32-bit) = 128 KiB stack; matches the POSIX simulator.
+    // actuation_task is only the launcher: it brings up the network, then
+    // constructs the Controller node and blocks in wait_for_completion().
+    // The deep MPC/PID/Eigen control work runs on the node's own 256 KiB
+    // node_stack (controller_node.cpp, off-heap StaticTask). The launcher's
+    // own peak is bounded by CycloneDDS participant/reader/writer creation,
+    // so it does not need the POSIX simulator's 32768-word (128 KiB) stack.
+    // That value was copied from the 4 MiB-heap POSIX build; here the whole
+    // FreeRTOS heap is only configTOTAL_HEAP_SIZE (96 KiB) because int_sram_dram
+    // is already ~500/512 KiB full (node_stack + ucHeap + lwIP ram_heap), so a
+    // 128 KiB stack can never be allocated. 8192 words = 32 KiB fits and leaves
+    // the rest of the heap for CycloneDDS' internal threads and objects.
     BaseType_t rc = xTaskCreate(
-        actuation_task, "actuation", 32768, nullptr,
+        actuation_task, "actuation", 8192, nullptr,
         configMAX_PRIORITIES - 2, nullptr);
     if (rc != pdPASS) {
         printf("xTaskCreate failed: %ld\n", (long)rc);
