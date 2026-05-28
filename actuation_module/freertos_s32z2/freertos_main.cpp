@@ -4,12 +4,23 @@
 // B-2: FreeRTOS entry — bring up the board, configure the network, run the
 // actuation controller.
 
+#include <cstdint>
 #include <cstdio>
 
 #include "FreeRTOS.h"
 #include "task.h"
 
 #include "platform/freertos/s32z2/board_init.h"
+
+// configAPPLICATION_ALLOCATED_HEAP==1: the application owns the heap_4 heap.
+// Place it in the 7 MiB int_sram code region (via the .freertos_heap output
+// section in heap_in_sram.ld) instead of the nearly-full 512 KiB int_sram_dram,
+// so CycloneDDS (which mallocs through pvPortMalloc) has room. The array is
+// NOLOAD, so it does not bloat the ELF.
+extern "C" {
+uint8_t ucHeap[configTOTAL_HEAP_SIZE]
+    __attribute__((section(".freertos_heap"), aligned(8)));
+}
 
 // actuation_main is main.cpp's main() renamed via -Dmain=actuation_main.
 // CMake adds a -Wl,--defsym alias so the symbol is reachable under the
@@ -64,17 +75,17 @@ int main(void) {
     board_init();
     printf("FreeRTOS S32Z2 actuation starting...\n");
 
-    // actuation_task is only the launcher: it brings up the network, then
-    // constructs the Controller node and blocks in wait_for_completion().
-    // The deep MPC/PID/Eigen control work runs on the node's own 256 KiB
-    // node_stack (controller_node.cpp, off-heap StaticTask). The launcher's
-    // own peak is bounded by CycloneDDS participant/reader/writer creation,
-    // so it does not need the POSIX simulator's 32768-word (128 KiB) stack.
-    // That value was copied from the 4 MiB-heap POSIX build; here the whole
-    // FreeRTOS heap is only configTOTAL_HEAP_SIZE (96 KiB) because int_sram_dram
-    // is already ~500/512 KiB full (node_stack + ucHeap + lwIP ram_heap), so a
-    // 128 KiB stack can never be allocated. 8192 words = 32 KiB fits and leaves
-    // the rest of the heap for CycloneDDS' internal threads and objects.
+    // actuation_task is the launcher: it brings up the network, then constructs
+    // the Controller node and blocks in wait_for_completion(). The deep per-cycle
+    // MPC/PID/Eigen work runs on the node's own 256 KiB node_stack
+    // (controller_node.cpp, off-heap StaticTask), but the Controller *constructor*
+    // (CycloneDDS participant/reader/writer creation + Eigen MPC setup, both
+    // stack-heavy) runs HERE on the launcher stack. The POSIX simulator uses
+    // 32768 words (128 KiB); the earlier 8192-word (32 KiB) value here was a
+    // workaround for the old 96 KiB int_sram_dram heap and overflowed during
+    // Controller construction (stack-overflow hook / corrupted-context undef
+    // after dds_create_domain). Now that ucHeap lives in the 7 MiB int_sram
+    // region (heap_in_sram.ld), the full 128 KiB launcher stack is affordable.
     // xTaskCreateFpu (not xTaskCreate) so the ARM_CR52_GIC port reserves a
     // per-task FPU context and records its TLS pointer. The port disables
     // FPEXC.EN per task and re-enables it lazily in vPortUndefinedInstruction
@@ -82,7 +93,7 @@ int main(void) {
     // point at this task's FP save area, which only xTaskCreateFpu sets up.
     TaskHandle_t actuation_handle = nullptr;
     BaseType_t rc = xTaskCreateFpu(
-        actuation_task, "actuation", 8192, nullptr,
+        actuation_task, "actuation", 32768, nullptr,
         configMAX_PRIORITIES - 2, &actuation_handle);
     if (rc != pdPASS) {
         printf("xTaskCreate failed: %ld\n", (long)rc);

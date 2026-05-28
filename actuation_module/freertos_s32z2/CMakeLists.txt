@@ -247,7 +247,17 @@ set_source_files_properties(cp15_arm.S PROPERTIES
 )
 
 target_link_options(actuation_freertos_s32z2 PRIVATE
-    -T${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Linker_Files/linker_ram_r52.ld
+    # NXP's linker as the *default* script (-dT, not -T) so heap_in_sram.ld's
+    # "INSERT AFTER .sram_code" can augment it: INSERT only augments the default
+    # script, and -T would replace it (-> "`.sram_code' not found for insert").
+    # The vendor file stays unmodified.
+    -Wl,--default-script=${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Linker_Files/linker_ram_r52.ld
+    # Relocate the FreeRTOS (heap_4) ucHeap out of the nearly-full 512 KiB
+    # int_sram_dram into the 7 MiB int_sram code region so CycloneDDS has heap.
+    # The INSERT script is given via -T (so it is parsed as a script) and, because
+    # it contains INSERT, it augments the default script set above instead of
+    # replacing it.
+    -T${CMAKE_CURRENT_SOURCE_DIR}/heap_in_sram.ld
     # main.cpp is C++, so -Dmain=actuation_main produces the mangled symbol
     # _Z14actuation_mainv. NXP's startup.s and freertos_main.cpp both call
     # `actuation_main` unmangled; expose it as an alias so both reach the
@@ -376,8 +386,24 @@ target_sources(actuation_freertos_s32z2 PRIVATE
 )
 # Force generic_timer.c onto the S32DS branch (uses OsIf_ArchCfg.h + core.h
 # instead of a generic gic.h that NXP doesn't actually ship).
+#
+# -mgeneral-regs-only: the tick path lives entirely in generic_timer.c
+# (SysTick_Handler -> vUpdateTimer -> read_CNTPCT) and runs in interrupt
+# context. The ARM_CR52_GIC port uses a lazy-FPU scheme whose interrupt-mode
+# FP save/restore (the undefined-instruction svc_mode path + the in-place
+# dispatcher save/restore) corrupts a preempted task's callee-saved VFP
+# registers d8-d15. read_CNTPCT does no floating-point math, but GCC emitted
+# "vmov.i32 d16,#0; vstr d16" merely to zero a uint64_t local, which made the
+# 1 kHz tick an FP-using ISR and reliably zeroed live d8/d9 in tasks (e.g. the
+# function pointers GCC parks in d8/d9 across the calls in CycloneDDS
+# dds__builtin_init -> NULL btif.is_visible -> blx 0 -> PrefetchAbort).
+# generic_timer.c is pure integer (uint64_t), so forbidding FP/SIMD registers
+# here is functionally inert and removes the FP-from-ISR trigger. (handoff
+# risk #4: confine NEON to non-ISR paths.)
 set_source_files_properties(${S32Z2_FREERTOS_SOURCE_DIR}/generic_timer.c
-    PROPERTIES COMPILE_DEFINITIONS "_S32DS_FREERTOS_=1")
+    PROPERTIES
+        COMPILE_DEFINITIONS "_S32DS_FREERTOS_=1"
+        COMPILE_OPTIONS "-mgeneral-regs-only")
 
 # port.c's vPortInterruptDispatcher (wired to the IRQ vector in cp15_arm.S)
 # looks up the per-IRQ ISR. Its non-_S32DS_FREERTOS_ path reads a flat

@@ -33,14 +33,18 @@
 #define configIDLE_SHOULD_YIELD             1
 #define configUSE_TIME_SLICING              1
 
-// S32Z2's int_sram_dram (where .bss/.sram_data land) is only 512KB,
-// shared with lwIP's MEM_SIZE pool, the newlib mini-heap, and ~256KB of
-// initialised globals from CycloneDDS / autoware. Keep the FreeRTOS heap
-// modest; CycloneDDS does its own malloc for the bigger allocations.
-#define configTOTAL_HEAP_SIZE               ((size_t)(96U * 1024U))
+// CycloneDDS allocates everything (participant, readers/writers, history
+// caches, serdata, worker-thread stacks) through ddsrt_malloc -> pvPortMalloc,
+// i.e. this FreeRTOS heap. 96 KiB is exhausted during dds_create_domain
+// (pvPortMalloc returns NULL -> ddsrt_malloc -> abort). int_sram_dram (512 KiB,
+// where .sram_data lands) is already ~500 KiB full, so the heap cannot grow
+// there. Instead the application owns ucHeap (configAPPLICATION_ALLOCATED_HEAP)
+// and places it in the 7 MiB int_sram code region via the .freertos_heap
+// section in heap_in_sram.ld (freertos_main.cpp defines the array).
+#define configTOTAL_HEAP_SIZE               ((size_t)(3U * 1024U * 1024U))
 #define configSUPPORT_STATIC_ALLOCATION     1
 #define configSUPPORT_DYNAMIC_ALLOCATION    1
-#define configAPPLICATION_ALLOCATED_HEAP    0
+#define configAPPLICATION_ALLOCATED_HEAP    1
 
 #define configUSE_MUTEXES                   1
 #define configUSE_RECURSIVE_MUTEXES         1
