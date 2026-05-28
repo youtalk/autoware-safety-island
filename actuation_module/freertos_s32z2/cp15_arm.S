@@ -60,3 +60,139 @@ __wrap_write_64bit:
     strd    r0, r1, [r2]
     bx      lr
     .size   __wrap_write_64bit, . - __wrap_write_64bit
+
+    // ===== CP15 / MPU / GIC helpers =====
+    // The same `mov pc, lr` interworking failure also affects every other
+    // CP15 accessor NXP ships in core_utility.s. SystemInit → Core_IC_Init
+    // and the GIC500 init path call these via `blx` from ARM C code, and
+    // any non-interworked return derails into Thumb decode of ARM bytes.
+    // Wrap every helper that is actually called via BLX in the current
+    // build (15 total, identified by `objdump -d | grep 'blx 321012...'`).
+    //
+    // Encodings are byte-identical to NXP's originals at 0x32101276..
+    // 0x32101324, just re-emitted as ARM-mode with a `bx lr` epilogue.
+
+    .global __wrap_read_SCTLR
+    .type   __wrap_read_SCTLR, %function
+__wrap_read_SCTLR:
+    mrc     p15, 0, r0, c1, c0, 0
+    bx      lr
+    .size   __wrap_read_SCTLR, . - __wrap_read_SCTLR
+
+    .global __wrap_write_SCTLR
+    .type   __wrap_write_SCTLR, %function
+__wrap_write_SCTLR:
+    mcr     p15, 0, r0, c1, c0, 0
+    isb     sy
+    bx      lr
+    .size   __wrap_write_SCTLR, . - __wrap_write_SCTLR
+
+    .global __wrap_write_PRSELR
+    .type   __wrap_write_PRSELR, %function
+__wrap_write_PRSELR:
+    mcr     p15, 0, r0, c6, c2, 1
+    isb     sy
+    bx      lr
+    .size   __wrap_write_PRSELR, . - __wrap_write_PRSELR
+
+    .global __wrap_write_PRBAR
+    .type   __wrap_write_PRBAR, %function
+__wrap_write_PRBAR:
+    mcr     p15, 0, r0, c6, c3, 0
+    bx      lr
+    .size   __wrap_write_PRBAR, . - __wrap_write_PRBAR
+
+    .global __wrap_write_PRLAR
+    .type   __wrap_write_PRLAR, %function
+__wrap_write_PRLAR:
+    mcr     p15, 0, r0, c6, c3, 1
+    bx      lr
+    .size   __wrap_write_PRLAR, . - __wrap_write_PRLAR
+
+    .global __wrap_write_MAIR0
+    .type   __wrap_write_MAIR0, %function
+__wrap_write_MAIR0:
+    mcr     p15, 0, r0, c10, c2, 0
+    bx      lr
+    .size   __wrap_write_MAIR0, . - __wrap_write_MAIR0
+
+    .global __wrap_write_MAIR1
+    .type   __wrap_write_MAIR1, %function
+__wrap_write_MAIR1:
+    mcr     p15, 0, r0, c10, c2, 1
+    bx      lr
+    .size   __wrap_write_MAIR1, . - __wrap_write_MAIR1
+
+    .global __wrap_read_MPIDR
+    .type   __wrap_read_MPIDR, %function
+__wrap_read_MPIDR:
+    mrc     p15, 0, r0, c0, c0, 5
+    bx      lr
+    .size   __wrap_read_MPIDR, . - __wrap_read_MPIDR
+
+    .global __wrap_write_ICC_SRE
+    .type   __wrap_write_ICC_SRE, %function
+__wrap_write_ICC_SRE:
+    mcr     p15, 0, r0, c12, c12, 5
+    isb     sy
+    bx      lr
+    .size   __wrap_write_ICC_SRE, . - __wrap_write_ICC_SRE
+
+    // gic500_enableCpuInterface reaches write_ICC_PMR via *plain* ARM `bl`,
+    // not `blx` — the compiler/linker did not insert an interworking veneer.
+    // Without a wrap the ARM caller jumps to a Thumb-encoded body and decodes
+    // its first halfword as ARM (UndefInstr). All other ICC_* helpers in the
+    // same call sequence happen to be reached via `blx` and are caught by
+    // the BLX-only audit; PMR is the lone exception, so it needs a wrap too.
+    .global __wrap_write_ICC_PMR
+    .type   __wrap_write_ICC_PMR, %function
+__wrap_write_ICC_PMR:
+    mcr     p15, 0, r0, c4, c6, 0
+    isb     sy
+    bx      lr
+    .size   __wrap_write_ICC_PMR, . - __wrap_write_ICC_PMR
+
+    .global __wrap_write_ICC_BPR0
+    .type   __wrap_write_ICC_BPR0, %function
+__wrap_write_ICC_BPR0:
+    mcr     p15, 0, r0, c12, c8, 3
+    bx      lr
+    .size   __wrap_write_ICC_BPR0, . - __wrap_write_ICC_BPR0
+
+    .global __wrap_write_ICC_BPR1
+    .type   __wrap_write_ICC_BPR1, %function
+__wrap_write_ICC_BPR1:
+    mcr     p15, 0, r0, c12, c12, 3
+    bx      lr
+    .size   __wrap_write_ICC_BPR1, . - __wrap_write_ICC_BPR1
+
+    .global __wrap_write_ICC_IGRPEN0
+    .type   __wrap_write_ICC_IGRPEN0, %function
+__wrap_write_ICC_IGRPEN0:
+    mcr     p15, 0, r0, c12, c12, 6
+    isb     sy
+    bx      lr
+    .size   __wrap_write_ICC_IGRPEN0, . - __wrap_write_ICC_IGRPEN0
+
+    .global __wrap_write_ICC_IGRPEN1
+    .type   __wrap_write_ICC_IGRPEN1, %function
+__wrap_write_ICC_IGRPEN1:
+    mcr     p15, 0, r0, c12, c12, 7
+    isb     sy
+    bx      lr
+    .size   __wrap_write_ICC_IGRPEN1, . - __wrap_write_ICC_IGRPEN1
+
+    .global __wrap_read_ICC_CTLR
+    .type   __wrap_read_ICC_CTLR, %function
+__wrap_read_ICC_CTLR:
+    mrc     p15, 0, r0, c12, c12, 4
+    bx      lr
+    .size   __wrap_read_ICC_CTLR, . - __wrap_read_ICC_CTLR
+
+    .global __wrap_write_ICC_CTLR
+    .type   __wrap_write_ICC_CTLR, %function
+__wrap_write_ICC_CTLR:
+    mcr     p15, 0, r0, c12, c12, 4
+    isb     sy
+    bx      lr
+    .size   __wrap_write_ICC_CTLR, . - __wrap_write_ICC_CTLR

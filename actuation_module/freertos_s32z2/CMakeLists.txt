@@ -153,6 +153,17 @@ add_compile_definitions(CPU_CORTEX_R52=1)
 # which is why the same chip + the same toolchain boot Zephyr cleanly.
 add_compile_definitions(ENABLE_FPU=1)
 
+# NXP's SystemInit gates Core_MPU_Init() on this macro. With MPU disabled,
+# Cortex-R52's default memory map treats 0x4000_0000-0x7FFF_FFFF as Normal
+# memory rather than Device; halfword writes to MSCM IRSPRC (0x419A_0880+,
+# the first thing SystemInit does after Sys_GetCoreID) then get buffered/
+# coalesced by the bus and the peripheral aborts the access. With MPU_ENABLE,
+# Core_MPU_Init runs first and the PRBAR/PRLAR tables (filled by the NXP
+# startup_init from RTD's vector code) mark 0x4000_0000-0x9FFF_FFFF as
+# Device-nGnRnE, after which the MSCM loop sees a regular peripheral.
+# The Toggle_Led example's .cproject sets this — we have to set it too.
+add_compile_definitions(MPU_ENABLE=1)
+
 # Stay on the GENERIC_ECC_SRAM_INIT_64B init path (NXP's default).
 # init_data_bss uses block_copy64 / zero_copy64 / write_64bit; write_64bit
 # is the only Thumb-encoded helper in that chain and is fixed via the
@@ -252,6 +263,27 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
     "-Wl,--wrap=write_FPEXC"
     "-Wl,--wrap=read_FPEXC"
     "-Wl,--wrap=write_64bit"
+    # Same `mov pc, lr` non-interwork bug affects every CP15/MPU/GIC helper
+    # NXP's core_utility.s ships. SystemInit → Core_IC_Init → read/write_SCTLR
+    # was the next wall after the FPU-enable fix; Core_MPU_Init and the
+    # gic500 init path call the rest. Wrap every helper that the current
+    # build references via `blx` (see objdump | grep 'blx 321012').
+    "-Wl,--wrap=read_SCTLR"
+    "-Wl,--wrap=write_SCTLR"
+    "-Wl,--wrap=write_PRSELR"
+    "-Wl,--wrap=write_PRBAR"
+    "-Wl,--wrap=write_PRLAR"
+    "-Wl,--wrap=write_MAIR0"
+    "-Wl,--wrap=write_MAIR1"
+    "-Wl,--wrap=read_MPIDR"
+    "-Wl,--wrap=write_ICC_SRE"
+    "-Wl,--wrap=write_ICC_PMR"
+    "-Wl,--wrap=write_ICC_BPR0"
+    "-Wl,--wrap=write_ICC_BPR1"
+    "-Wl,--wrap=write_ICC_IGRPEN0"
+    "-Wl,--wrap=write_ICC_IGRPEN1"
+    "-Wl,--wrap=read_ICC_CTLR"
+    "-Wl,--wrap=write_ICC_CTLR"
 )
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE
