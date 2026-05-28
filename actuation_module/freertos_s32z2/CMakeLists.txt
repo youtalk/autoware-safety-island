@@ -94,7 +94,10 @@ message(STATUS "S32Z2 FreeRTOS example:        ${S32Z2_FREERTOS_EXAMPLE}")
 set(CONFIG_LOG_LEVEL 1 CACHE STRING "Log level (0=off, 1=info, 2=debug)")
 set(CONFIG_LOG_THROTTLE_RATE 3 CACHE STRING "Log throttle rate in seconds")
 set(CONFIG_DDS_DOMAIN_ID 2 CACHE STRING "DDS domain ID")
-set(CONFIG_DDS_NETWORK_INTERFACE "" CACHE STRING "DDS network interface name (empty=auto)")
+# CycloneDDS selects its NIC by this value (interface name or IP). On the
+# single-NIC S32Z2 the board's own IP is the natural selector; default it to
+# the lwip_bringup.c static-fallback address so a bench build is self-consistent.
+set(CONFIG_DDS_NETWORK_INTERFACE "192.168.0.105" CACHE STRING "DDS network interface name or IP")
 set(CONFIG_DDS_LOG_LEVEL 0 CACHE STRING "DDS log level (0=off, 1=warn, 2=debug)")
 set(CONFIG_THREAD_STACK_SIZE 262144 CACHE STRING "Thread stack size in bytes")
 set(CONFIG_NET_DHCPV4_INITIAL_DELAY_MAX 0 CACHE STRING "DHCP delay")
