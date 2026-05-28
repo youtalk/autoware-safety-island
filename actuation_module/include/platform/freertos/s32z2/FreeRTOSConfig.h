@@ -9,8 +9,14 @@
 
 #include <stdint.h>
 
-// Substitute the value observed in Task 5 Step 1 — the clock Mcu_Init programs.
-#define configCPU_CLOCK_HZ                  ((uint32_t)240000000UL)
+// Base clock of the Cortex-R52 generic timer (CNTPCT), which generic_timer.c
+// uses as `period = (configCPU_CLOCK_HZ / cnt_div) / configTICK_RATE_HZ`. This
+// is the 40 MHz system-counter domain, NOT the 800 MHz RTU0_CORE_CLK — the
+// generic timer runs on its own fixed clock. Value matches NXP's reference
+// lwip_S32Z27X_FreeRTOS_R52 FreeRTOSConfig.h (we share its S32CT clock config).
+// The previous 240 MHz placeholder made every tick 6x too long (~6 ms), so a
+// pdMS_TO_TICKS(30000) wait took ~180 s instead of 30 s.
+#define configCPU_CLOCK_HZ                  ((uint32_t)40000000UL)
 
 // Use the Cortex-R52 physical timer (CNTP_*) rather than the virtual timer.
 // Required by NXP's generic_timer.c to pick a TIMER_INT_ID at preprocess time.
