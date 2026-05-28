@@ -250,6 +250,14 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
     # work; uncaught throws end in std::terminate as expected.
     "-Wl,--defsym=__exidx_start=0"
     "-Wl,--defsym=__exidx_end=0"
+    # The port's FPU handlers live together in one .handlers input section, so
+    # keeping vPortUndefinedInstruction (wired to the undef vector in
+    # cp15_arm.S) also keeps its neighbour vPortInterruptDispatcher, whose
+    # non-_S32DS_FREERTOS_ build path references __VECTOR_RAM. We don't use that
+    # dispatcher (the IRQ vector goes to NXP's IRQ_Handler, which looks up ISRs
+    # via R52VtabeRefArray), so the symbol just needs to resolve. Point it at
+    # the core-0 RAM vector table base so the value is at least sensible.
+    "-Wl,--defsym=__VECTOR_RAM=__VTABLE_0"
     # NXP's core_utility.s ships these helpers in Thumb mode (.thumb2).
     # Their `mov pc, lr` epilogue should interwork on ARMv8-R but on this
     # Cortex-R52 the T bit stays set on return, so calls from ARM C code

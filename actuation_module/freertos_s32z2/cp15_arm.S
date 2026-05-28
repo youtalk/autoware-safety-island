@@ -196,3 +196,26 @@ __wrap_write_ICC_CTLR:
     isb     sy
     bx      lr
     .size   __wrap_write_ICC_CTLR, . - __wrap_write_ICC_CTLR
+
+    // ===== Undefined-Instruction vector -> FreeRTOS lazy-FPU handler =====
+    // NXP's Vector_Table.s routes the undef vector to a .weak UndefInstr_Handler
+    // (exceptions.c) that just spins. The ARM_CR52_GIC port instead ships its
+    // own vPortUndefinedInstruction (port.c, built when configENABLE_FPU==1)
+    // that lazily re-enables the FPU on a task's first VFP instruction and
+    // manages per-task FP context -- but it is never wired up. The port clears
+    // FPEXC.EN on every task switch and *relies* on this handler to re-enable
+    // it, so without the wiring the first VFP op in any task (e.g. _vfprintf_r's
+    // `vpush {d8-d9}`) traps into the spinning default and hangs.
+    //
+    // Provide a strong UndefInstr_Handler (overriding the weak one) that jumps
+    // to vPortUndefinedInstruction. The vector reaches this exactly as it
+    // reached the spinning default (ARM-mode, UND mode, LR_und set); the
+    // `ldr pc, =` interworks to the port handler (Thumb) without disturbing LR,
+    // which vPortUndefinedInstruction adjusts itself. FP-using tasks must be
+    // created with xTaskCreateFpu so the handler finds their FP context in TLS.
+    .global UndefInstr_Handler
+    .type   UndefInstr_Handler, %function
+UndefInstr_Handler:
+    ldr     pc, 1f
+1:  .word   vPortUndefinedInstruction
+    .size   UndefInstr_Handler, . - UndefInstr_Handler

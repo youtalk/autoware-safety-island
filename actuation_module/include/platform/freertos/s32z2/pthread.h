@@ -39,6 +39,20 @@
 extern "C" {
 #endif
 
+// The ARM_CR52_GIC port disables FPEXC.EN per task and re-enables it lazily in
+// vPortUndefinedInstruction, which finds a task's FP save area via its TLS[0]
+// pointer. Only the *Fpu task-create variants set that pointer up, so every
+// thread that may execute floating point (all DDS/controller threads here)
+// must be created with them. xTaskCreateStaticFpu is defined in the port's
+// port.c but not declared in portmacro.h, so declare it here.
+extern TaskHandle_t xTaskCreateStaticFpu(TaskFunction_t pxTaskCode,
+                                         const char *pcName,
+                                         uint32_t ulStackDepth,
+                                         void *pvParameters,
+                                         UBaseType_t uxPriority,
+                                         StackType_t *puxStackBuffer,
+                                         StaticTask_t *pxTaskBuffer);
+
 #undef PTHREAD_MUTEX_INITIALIZER
 #define PTHREAD_MUTEX_INITIALIZER ((pthread_mutex_t)0)
 
@@ -137,10 +151,10 @@ static inline int pthread_create(pthread_t *thread,
     if (attr != NULL && attr->stackaddr != NULL && attr->stacksize > 0) {
         StaticTask_t *tcb = (StaticTask_t *)pvPortMalloc(sizeof(StaticTask_t));
         if (tcb != NULL) {
-            info->task = xTaskCreateStatic(
+            info->task = xTaskCreateStaticFpu(
                 pthread_s32z2_entry_,
                 "pthread",
-                (configSTACK_DEPTH_TYPE)((size_t)attr->stacksize / sizeof(StackType_t)),
+                (uint32_t)((size_t)attr->stacksize / sizeof(StackType_t)),
                 info,
                 tskIDLE_PRIORITY + 1,
                 (StackType_t *)attr->stackaddr,
@@ -152,8 +166,8 @@ static inline int pthread_create(pthread_t *thread,
         if (attr != NULL && attr->stacksize > 0) {
             depth = (configSTACK_DEPTH_TYPE)((size_t)attr->stacksize / sizeof(StackType_t));
         }
-        ok = xTaskCreate(pthread_s32z2_entry_, "pthread", depth, info,
-                         tskIDLE_PRIORITY + 1, &info->task);
+        ok = xTaskCreateFpu(pthread_s32z2_entry_, "pthread", depth, info,
+                            tskIDLE_PRIORITY + 1, &info->task);
     }
     if (ok != pdPASS) {
         vSemaphoreDelete(info->done);

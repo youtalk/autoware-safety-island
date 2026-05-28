@@ -73,9 +73,15 @@ int main(void) {
     // is already ~500/512 KiB full (node_stack + ucHeap + lwIP ram_heap), so a
     // 128 KiB stack can never be allocated. 8192 words = 32 KiB fits and leaves
     // the rest of the heap for CycloneDDS' internal threads and objects.
-    BaseType_t rc = xTaskCreate(
+    // xTaskCreateFpu (not xTaskCreate) so the ARM_CR52_GIC port reserves a
+    // per-task FPU context and records its TLS pointer. The port disables
+    // FPEXC.EN per task and re-enables it lazily in vPortUndefinedInstruction
+    // (wired to the undef vector in cp15_arm.S); that handler needs TLS[0] to
+    // point at this task's FP save area, which only xTaskCreateFpu sets up.
+    TaskHandle_t actuation_handle = nullptr;
+    BaseType_t rc = xTaskCreateFpu(
         actuation_task, "actuation", 8192, nullptr,
-        configMAX_PRIORITIES - 2, nullptr);
+        configMAX_PRIORITIES - 2, &actuation_handle);
     if (rc != pdPASS) {
         printf("xTaskCreate failed: %ld\n", (long)rc);
         for (;;) {}
