@@ -143,6 +143,18 @@ add_compile_definitions(USING_RTD=1 S32Z27=1)
 # and `else` ends up orphaned.
 add_compile_definitions(CPU_CORTEX_R52=1)
 
+# Identify the target as an RTU R52 core (NXP's .cproject defines this
+# project-wide for the FreeRTOS_Toggle_Led RTU0_R52 example). Without it,
+# core.c's Core_registerIsrHandler takes the non-RTU `#else` branch and writes
+# `R52VtabeRefArray[irq_id]` (treating the per-core table-pointer ARRAY as the
+# vector table) instead of `R52VtabeRefArray[coreId][irq_id]` -- so the tick
+# ISR registered by generic_timer.c lands in garbage at &R52VtabeRefArray+30*4
+# rather than in the core-0 ATCM vector table (0x30000000[30]). Both NXP's
+# IRQ_Handler and the port's vPortInterruptDispatcher read 0x30000000[30], find
+# the unregistered default undefined_handler, and stall. Defining RTU_R52 makes
+# the register and lookup paths agree.
+add_compile_definitions(RTU_R52)
+
 # NXP's startup gates the FP/NEON CPACR write on this macro. We compile
 # C/C++ with -mfloat-abi=hard -mfpu=neon-fp-armv8, so the compiler is free
 # to emit VFP/Advanced-SIMD instructions in any function (ABI argument
