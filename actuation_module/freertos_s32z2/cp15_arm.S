@@ -219,3 +219,25 @@ UndefInstr_Handler:
     ldr     pc, 1f
 1:  .word   vPortUndefinedInstruction
     .size   UndefInstr_Handler, . - UndefInstr_Handler
+
+    // ===== IRQ vector -> FreeRTOS interrupt dispatcher =====
+    // NXP's Vector_Table.s routes the IRQ vector to a weak IRQ_Handler
+    // (exceptions_stack.s) that saves the interrupted context onto the SYS
+    // (task) stack, calls the registered ISR, and returns. It cannot perform a
+    // FreeRTOS context switch: xPortSysTickHandler calls vTaskSwitchContext()
+    // (updating pxCurrentTCB) but the generic handler never swaps stacks, and
+    // the periodic-timer IRQ data-aborts in its `ldmia sp!, {r0-r12}` epilogue.
+    //
+    // The port ships vPortInterruptDispatcher (port.c) -- the real FreeRTOS IRQ
+    // entry that reads ICC_IAR1, dispatches low-priority ISRs, and routes OS
+    // interrupts (>= configMAX_SYSCALL_INTERRUPT_PRIORITY) through its osInt
+    // path which does the full save / vTaskSwitchContext / restore. Override
+    // the weak IRQ_Handler to jump to it. It uses the IRQ/SVC mode stacks that
+    // startup.s set up, and looks up ISRs via __VECTOR_RAM (defsym'd to the
+    // core-0 RAM vector table that NXP's startup populates).
+    .global IRQ_Handler
+    .type   IRQ_Handler, %function
+IRQ_Handler:
+    ldr     pc, 2f
+2:  .word   vPortInterruptDispatcher
+    .size   IRQ_Handler, . - IRQ_Handler

@@ -364,6 +364,18 @@ target_sources(actuation_freertos_s32z2 PRIVATE
 set_source_files_properties(${S32Z2_FREERTOS_SOURCE_DIR}/generic_timer.c
     PROPERTIES COMPILE_DEFINITIONS "_S32DS_FREERTOS_=1")
 
+# port.c's vPortInterruptDispatcher (wired to the IRQ vector in cp15_arm.S)
+# looks up the per-IRQ ISR. Its non-_S32DS_FREERTOS_ path reads a flat
+# __VECTOR_RAM table, but generic_timer.c registers the tick ISR through the
+# S32DS R52VtabeRefArray per-core table mechanism (the same one NXP's stock
+# IRQ_Handler used). Without this define the dispatcher looked up the wrong
+# table, found the unregistered default, and spun in undefined_handler. Build
+# port.c on the S32DS branch so the dispatcher uses R52VtabeRefArray and finds
+# xPortSysTickHandler. (This also places its handlers in .systeminit, which the
+# linker script maps, instead of an orphan .handlers section.)
+set_source_files_properties(${S32Z2_FREERTOS_PORT_DIR}/port.c
+    PROPERTIES COMPILE_DEFINITIONS "_S32DS_FREERTOS_=1")
+
 # common/'s `#include <pthread.h>` is resolved by the hand-rolled shim at
 # actuation_module/include/platform/freertos/s32z2/pthread.h (that path is
 # already first on the include search list). The shim maps pthread_mutex_*
