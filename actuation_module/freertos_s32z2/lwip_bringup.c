@@ -19,6 +19,21 @@
 
 #include "platform/freertos/s32z2/lwip_init.h"
 
+// Static-IP fallback used when no DHCP lease arrives (e.g. a link with no DHCP
+// server, like the bench). Lets the controller + DDS still come up. Overridable
+// at build time via -D. Board is .105/24; the gateway points at the bench host
+// (.101), which is the DDS peer on the same /24 — same-subnet traffic to it
+// needs no router, this just gives a sane default route.
+#ifndef LWIP_FALLBACK_IP
+#define LWIP_FALLBACK_IP       "192.168.0.105"
+#endif
+#ifndef LWIP_FALLBACK_NETMASK
+#define LWIP_FALLBACK_NETMASK  "255.255.255.0"
+#endif
+#ifndef LWIP_FALLBACK_GW
+#define LWIP_FALLBACK_GW       "192.168.0.101"
+#endif
+
 // NXP-provided NETC <-> lwIP glue from
 // $LWIP_PATH/code/ports/netif/ethif/rtd/generic/eth_port.c.
 extern err_t ethif_ethernetif_init(struct netif *netif);
@@ -67,8 +82,13 @@ int lwip_bring_up_blocking(void) {
     printf("lwip: DHCP requested, waiting for lease (timeout 30s)...\n");
 
     if (xSemaphoreTake(s_dhcp_done, pdMS_TO_TICKS(30000)) != pdTRUE) {
-        printf("lwip: DHCP lease timed out\n");
-        return -5;
+        ip4_addr_t sip, snm, sgw;
+        ip4addr_aton(LWIP_FALLBACK_IP, &sip);
+        ip4addr_aton(LWIP_FALLBACK_NETMASK, &snm);
+        ip4addr_aton(LWIP_FALLBACK_GW, &sgw);
+        printf("lwip: DHCP lease timed out; using static IP %s\n", LWIP_FALLBACK_IP);
+        dhcp_stop(&s_netif);
+        netif_set_addr(&s_netif, &sip, &snm, &sgw);
     }
 
     char ip_str[16];
