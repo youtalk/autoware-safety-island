@@ -10,7 +10,6 @@
 #include "task.h"
 
 #include "platform/freertos/s32z2/board_init.h"
-#include "platform/platform_network.h"
 
 // actuation_main is main.cpp's main() renamed via -Dmain=actuation_main.
 // CMake adds a -Wl,--defsym alias so the symbol is reachable under the
@@ -19,11 +18,9 @@ extern "C" int actuation_main(void);
 
 static void actuation_task(void *pvParameters) {
     (void)pvParameters;
-    if (configure_network() != 0) {
-        printf("network bring-up failed\n");
-        vTaskDelete(nullptr);
-        return;
-    }
+    // Network bring-up is owned by actuation_main() (main.cpp's configure_network),
+    // which runs it once before constructing the Controller. Don't call it here
+    // too -- a second lwip_bring_up_blocking() re-inits tcpip/netif and hangs.
     int ret = actuation_main();
     printf("actuation_main returned %d\n", ret);
     vTaskDelete(nullptr);
