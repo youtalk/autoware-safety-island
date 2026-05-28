@@ -16,30 +16,6 @@
 // Required by NXP's generic_timer.c to pick a TIMER_INT_ID at preprocess time.
 #define configUSE_PHYSICAL_TIMER            1
 
-// FreeRTOS.h defaults configENABLE_FPU to 1 when undefined. With it set, the
-// NXP ARM_CR52_GIC port clears FPEXC.EN on every task switch (vPortYield /
-// vPortStartFirstTask: `bic FPEXC, #1<<30`) and relies on its own
-// vPortUndefinedInstruction handler to lazily re-enable the FPU on a task's
-// first VFP instruction. But that lazy handler is never wired up: NXP's
-// Vector_Table.s routes the undefined-instruction vector to the halting
-// UndefInstr_Handler in exceptions.c, not to vPortUndefinedInstruction, and
-// our tasks are created with plain xTaskCreate (not xTaskCreateFpu, so they
-// carry no per-task FPU context / TLS pointer). The result: the scheduler
-// disables the FPU for the first task, and that task's first VFP op (e.g.
-// _vfprintf_r's `vpush {d8-d9}`) traps straight into the halting handler.
-//
-// Set configENABLE_FPU to 0 so the port leaves FPEXC alone. Core_FPU_Init()
-// (ENABLE_FPU=1 in CMake) already enables CP10/CP11 + FPEXC.EN globally before
-// the scheduler starts, so every task runs with the FPU on.
-//
-// Limitation: with the port's FPU path disabled, D0-D31/FPSCR are NOT saved or
-// restored across a preemptive context switch, so floating-point state can be
-// corrupted when one FP-using task preempts another mid-computation. That is
-// acceptable for current bring-up (liveness), but full per-task FP correctness
-// needs the lazy mechanism wired (undef vector -> vPortUndefinedInstruction +
-// xTaskCreateFpu for every FP-using task) or unconditional FP save/restore.
-#define configENABLE_FPU                    0
-
 #define configUSE_PREEMPTION                1
 #define configUSE_IDLE_HOOK                 0
 #define configUSE_TICK_HOOK                 0
