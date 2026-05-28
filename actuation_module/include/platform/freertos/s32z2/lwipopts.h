@@ -37,7 +37,14 @@
 // initialised globals, and CycloneDDS buffers.
 #define MEM_SIZE                        (64 * 1024)
 #define MEMP_NUM_TCP_PCB                4
-#define MEMP_NUM_UDP_PCB                4
+// CycloneDDS opens 5 UDP sockets for a single participant with multicast
+// (unicast disc+data, multicast disc+data, and one transmit conn per
+// interface), each backed by an lwIP netconn + UDP PCB. lwIP defaults both
+// MEMP_NUM_NETCONN and MEMP_NUM_UDP_PCB to 4 -- one short -- so the 5th
+// netconn_alloc()/udp_new() returns NULL and dds_create_domain fails. Size
+// both for the participant's sockets plus DHCP/DNS headroom.
+#define MEMP_NUM_NETCONN                16
+#define MEMP_NUM_UDP_PCB                16
 #define MEMP_NUM_PBUF                   16
 #define PBUF_POOL_SIZE                  16
 
