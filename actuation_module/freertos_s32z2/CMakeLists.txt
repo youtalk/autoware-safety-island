@@ -143,6 +143,23 @@ add_compile_definitions(USING_RTD=1 S32Z27=1)
 # and `else` ends up orphaned.
 add_compile_definitions(CPU_CORTEX_R52=1)
 
+# NXP's startup gates the FP/NEON CPACR write on this macro. We compile
+# C/C++ with -mfloat-abi=hard -mfpu=neon-fp-armv8, so the compiler is free
+# to emit VFP/Advanced-SIMD instructions in any function (ABI argument
+# passing, autovectorisation, Eigen). Without ENABLE_FPU defined,
+# Core_FPU_Init() (core.c) compiles to a no-op stub and CPACR.CP10/CP11
+# stay disabled — the first FP instruction the compiler emits then traps
+# to UndefInstr_Handler. Zephyr's reset.S programs CPACR unconditionally,
+# which is why the same chip + the same toolchain boot Zephyr cleanly.
+add_compile_definitions(ENABLE_FPU=1)
+
+# Stay on the GENERIC_ECC_SRAM_INIT_64B init path (NXP's default).
+# init_data_bss uses block_copy64 / zero_copy64 / write_64bit; write_64bit
+# is the only Thumb-encoded helper in that chain and is fixed via the
+# `--wrap=write_64bit` linker hook below. The alternative VECTOR_INST
+# path drags in mem_xfer_by_vector / mem_zero_by_vector (NEON STM/LDM in
+# core_utility.s) which would each need their own wrap; not worth it.
+
 # (_S32DS_FREERTOS_ is applied per-source to generic_timer.c below — adding
 # it globally pulls OsIf_ArchCfg.h into eth_port.c too, which conflicts with
 # lwIP's sys_mutex_t typedef.)
@@ -190,12 +207,17 @@ add_executable(actuation_freertos_s32z2
     freertos_main.cpp
     board_init.c
     newlib_stubs.c
+    cp15_arm.S
     ${_s32z2_startup_asm}
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/exceptions.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/gic500.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/startup_init.c
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/system.c
+)
+# cp15_arm.S needs the same -x assembler-with-cpp treatment as NXP's .s
+set_source_files_properties(cp15_arm.S PROPERTIES
+    COMPILE_OPTIONS "-x;assembler-with-cpp"
 )
 
 target_link_options(actuation_freertos_s32z2 PRIVATE
@@ -217,6 +239,19 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
     # work; uncaught throws end in std::terminate as expected.
     "-Wl,--defsym=__exidx_start=0"
     "-Wl,--defsym=__exidx_end=0"
+    # NXP's core_utility.s ships these helpers in Thumb mode (.thumb2).
+    # Their `mov pc, lr` epilogue should interwork on ARMv8-R but on this
+    # Cortex-R52 the T bit stays set on return, so calls from ARM C code
+    # (Core_FPU_Init in core.c) come back still in Thumb state and the
+    # caller's ARM-encoded body is decoded as Thumb-2 — execution
+    # derails into the .intc_vector data area within a few instructions.
+    # Wrap them onto our ARM-mode replacements in cp15_arm.S whose
+    # `bx lr` epilogue interworks correctly.
+    "-Wl,--wrap=read_CPACR"
+    "-Wl,--wrap=write_CPACR"
+    "-Wl,--wrap=write_FPEXC"
+    "-Wl,--wrap=read_FPEXC"
+    "-Wl,--wrap=write_64bit"
 )
 
 target_include_directories(actuation_freertos_s32z2 PRIVATE
