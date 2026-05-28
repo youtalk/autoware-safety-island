@@ -20,6 +20,18 @@
 #define TCPIP_THREAD_PRIO               (12)   /* configMAX_PRIORITIES - 3 */
 #define DEFAULT_THREAD_STACKSIZE        4096
 
+// Mailbox depths. lwIP's opt.h defaults these to 0, and NXP's sys_arch.c
+// sys_mbox_new() spins forever (`b .`) when asked for a size <= 0 — so with
+// NO_SYS=0 the very first mbox (the tcpip thread's) hangs at bring-up unless
+// these are set > 0. Match the S32CT-generated lwipopts (TCPIP=40, recv=20,
+// accept=10); our hand-rolled lwipopts.h is first on the include path and
+// shadows that generated file.
+#define TCPIP_MBOX_SIZE                 40
+#define DEFAULT_UDP_RECVMBOX_SIZE       20
+#define DEFAULT_TCP_RECVMBOX_SIZE       20
+#define DEFAULT_RAW_RECVMBOX_SIZE       10
+#define DEFAULT_ACCEPTMBOX_SIZE         10
+
 // S32Z2's int_sram_dram region is only 512 KB for all data; the lwIP heap
 // has to share it with the FreeRTOS kernel heap (configTOTAL_HEAP_SIZE),
 // initialised globals, and CycloneDDS buffers.
