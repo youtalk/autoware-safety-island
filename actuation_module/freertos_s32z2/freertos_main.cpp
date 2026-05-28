@@ -51,7 +51,12 @@ extern "C" void vApplicationGetTimerTaskMemory(
 }
 
 extern "C" void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName) {
-    (void)xTask; (void)pcTaskName;
+    (void)xTask;
+    // Report loudly over UART (stderr reaches UART on this port) before
+    // spinning, so a too-small task stack names itself instead of silently
+    // hanging. configCHECK_FOR_STACK_OVERFLOW==2 calls this at switch time.
+    fprintf(stderr, "FreeRTOS: STACK OVERFLOW in task '%s'\n",
+            pcTaskName ? pcTaskName : "?");
     for (;;) {}
 }
 
