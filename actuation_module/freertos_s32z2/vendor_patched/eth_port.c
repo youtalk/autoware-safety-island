@@ -352,6 +352,23 @@ static err_t ethif_low_level_output(struct netif *netif, struct pbuf *p)
     /* If p was a pbuf chain instead, p's ref was decreased and we got another q pbuf with ref 1
     Either way, q has a +1 ref that we need to free in case we're not keeping the buffer - ie in case of errors*/
 
+#if (STD_OFF == ETH_43_NETC_RX_IRQ_ENABLED)
+    /* [actuation patch #5] Take our own reference on the outgoing pbuf BEFORE
+       pbuf_coalesce(). pbuf_coalesce() FREES its input when the pbuf is a chain
+       (it clones into one RAM pbuf and frees the original); but the caller
+       (udp_sendto_if_src) still owns that chain and frees it again once
+       ip_output returns. Without this ref a chained send -- e.g. CycloneDDS
+       scatter-gather SPDP -- double-freed the header pbuf and span forever in
+       lwIP's "pbuf_free: p->ref > 0" assert (a b . self-loop), starving the RX
+       poll thread. The upstream STD_ON path pbuf_ref()s for the same reason; the
+       STD_OFF (poll) path did not. For a single pbuf q == p and this up-front
+       ref is the in-flight reference; for a coalesced chain it is consumed by
+       pbuf_coalesce()'s free (keeping the caller's free balanced) and the fresh
+       q's birth ref becomes the in-flight reference. Either way ethif_poll_thread
+       releases exactly one reference via its deferred pbuf_free() on TX done. */
+    pbuf_ref(p);
+#endif /* STD_OFF == ETH_43_NETC_RX_IRQ_ENABLED */
+
     q = pbuf_coalesce(p, PBUF_RAW);
 #if (STD_ON == ETH_43_NETC_RX_IRQ_ENABLED)
 	pbuf_status = ERR_BUF;
@@ -401,26 +418,37 @@ static err_t ethif_low_level_output(struct netif *netif, struct pbuf *p)
         }
     }
 #else
+        /* [actuation patch #7] Poll-mode TX deadlock fix. The TX buffer
+           descriptors are reclaimed only by Eth_TxConfirmation() running in the
+           ethif_poll_thread. The original tight busy-wait below (no yield) starves
+           that thread whenever the sender is >= its priority: once DDS traffic
+           (control_cmd @ ~7 Hz + reliable-QoS acks) fills the ETH_TXBD_NUM ring,
+           Eth_43_NETC_SendFrame never returns BUFREQ_OK, the poll thread never runs
+           to reclaim, and the whole datapath deadlocks (RX dies too). Yield with
+           OsIf_TimeDelay(1) (== vTaskDelay, blocks so the lower/equal-prio poll
+           thread is scheduled and reclaims TX BDs) whenever the ring is momentarily
+           full. HW TX itself completes fine, so the ring always drains within a
+           tick or two and the send then succeeds. */
         do
         {
         	sys_arch_protect();
             status = Eth_43_NETC_SendFrame(netif_cfg[netif->num]->num, 0, q->payload, &q->tot_len, &bufferIndex, TRUE);
             sys_arch_unprotect(0);
+            if (BUFREQ_OK != status)
+            {
+                OsIf_TimeDelay(1);   /* let ethif_poll_thread reclaim completed TX BDs */
+            }
         }
         while (BUFREQ_OK != status);
 
         if (BUFREQ_OK == status)
         {
-            /* [actuation patch #5] Take a reference before handing the pbuf to
-               the in-flight TX queue. The STD_ON path pbuf_ref()s the pbuf up
-               front (see the top of this function); the STD_OFF path never did,
-               so after this function returns the lwIP stack dropped its only
-               reference and freed the pbuf, and the deferred pbuf_free() in the
-               poll thread's Tcpip_TxConfirmation then hit a ref==0 pbuf and
-               span forever in lwIP's "p->ref > 0" assert (board hung on the
-               first DHCP DISCOVER). Our reference is released by that deferred
-               free once transmission completes. */
-            pbuf_ref(q);
+            /* [actuation patch #5] The in-flight reference is the up-front
+               pbuf_ref(p) taken before pbuf_coalesce() above (which also stops a
+               chained send from being double-freed). Do NOT pbuf_ref(q) again
+               here: that would leave a chained-send's coalesced buffer with a
+               stranded reference. ethif_poll_thread releases exactly this one
+               reference via its deferred pbuf_free() once the frame is sent. */
             /* Post the pbuf to mbox, so that it will be checked for completion in ethif_poll_thread*/
             sys_mbox_post((sys_mbox_t *)&in_flight_tx_pbufs, (void *)q);
         }
