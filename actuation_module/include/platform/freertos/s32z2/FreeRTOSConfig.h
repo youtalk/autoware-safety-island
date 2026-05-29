@@ -28,6 +28,14 @@
 #define configTICK_RATE_HZ                  1000U
 #define configMAX_PRIORITIES                16
 #define configMINIMAL_STACK_SIZE            ((unsigned short)512)
+// Stack depths are in WORDS. The controller node thread needs >=64K words
+// (256+ KiB). configSTACK_DEPTH_TYPE must be 32-bit: with the default 16-bit
+// type, prvInitialiseNewTask stored uxStackDepth via strh and a 65536-word
+// (256 KiB) or 131072-word (512 KiB) depth truncated to 0 -> the stack paint
+// memset wrote 0 bytes and pxTopOfStack was set to pxStack-1, so the very first
+// context switch tripped vApplicationStackOverflowHook (pxStack[0] != 0xa5)
+// even though the task had not run. Forcing uint32_t fixes the truncation.
+#define configSTACK_DEPTH_TYPE              uint32_t
 #define configMAX_TASK_NAME_LEN             32
 #define configUSE_16_BIT_TICKS              0
 #define configIDLE_SHOULD_YIELD             1

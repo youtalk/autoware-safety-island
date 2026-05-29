@@ -99,7 +99,12 @@ set(CONFIG_DDS_DOMAIN_ID 2 CACHE STRING "DDS domain ID")
 # the lwip_bringup.c static-fallback address so a bench build is self-consistent.
 set(CONFIG_DDS_NETWORK_INTERFACE "192.168.0.105" CACHE STRING "DDS network interface name or IP")
 set(CONFIG_DDS_LOG_LEVEL 0 CACHE STRING "DDS log level (0=off, 1=warn, 2=debug)")
-set(CONFIG_THREAD_STACK_SIZE 262144 CACHE STRING "Thread stack size in bytes")
+# Controller node thread stack. The MPC lateral + PID control cycle is
+# stack-heavy (Eigen matrices + OSQP on the stack); 256 KiB overflowed by a few
+# hundred bytes (saved SP below the stack base, caught by the overflow hook), so
+# 512 KiB gives ~2x margin. The buffer lives in int_sram via node_stack_in_sram.ld
+# (the section attr in freertos_threading.h), which has room; int_sram_dram does not.
+set(CONFIG_THREAD_STACK_SIZE 524288 CACHE STRING "Thread stack size in bytes")
 set(CONFIG_NET_DHCPV4_INITIAL_DELAY_MAX 0 CACHE STRING "DHCP delay")
 set(CONFIG_ENABLE_SNTP OFF CACHE BOOL "Enable SNTP time sync")
 
@@ -233,6 +238,7 @@ add_executable(actuation_freertos_s32z2
     freertos_main.cpp
     board_init.c
     newlib_stubs.c
+    operator_new.cpp
     cp15_arm.S
     ${_s32z2_startup_asm}
     ${S32Z2_FREERTOS_EXAMPLE}/Project_Settings/Startup_Code/core.c
@@ -258,6 +264,10 @@ target_link_options(actuation_freertos_s32z2 PRIVATE
     # it contains INSERT, it augments the default script set above instead of
     # replacing it.
     -T${CMAKE_CURRENT_SOURCE_DIR}/heap_in_sram.ld
+    # Relocate the controller node thread's stack (.node_stack) out of the
+    # nearly-full int_sram_dram into int_sram too — the MPC/Eigen control cycle
+    # overflowed 256 KiB there. Another INSERT fragment (augments the default).
+    -T${CMAKE_CURRENT_SOURCE_DIR}/node_stack_in_sram.ld
     # main.cpp is C++, so -Dmain=actuation_main produces the mangled symbol
     # _Z14actuation_mainv. NXP's startup.s and freertos_main.cpp both call
     # `actuation_main` unmangled; expose it as an alias so both reach the
@@ -379,7 +389,11 @@ file(GLOB _freertos_core
 )
 target_sources(actuation_freertos_s32z2 PRIVATE
     ${_freertos_core}
-    ${S32Z2_FREERTOS_PORT_DIR}/port.c
+    # VENDORED+PATCHED port.c (NOT ${S32Z2_FREERTOS_PORT_DIR}/port.c): fixes the
+    # ARM solicited-resume CPSR bug (moveqs pc,lr inheriting SPSR_irq with a
+    # stray Thumb T-bit). See the header of vendor_patched/port.c. portmacro.h
+    # and the rest of the port still come from the SDK include dir.
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor_patched/port.c
     # ARM generic-timer-driven tick source: provides the weak
     # prvSetupTimerInterrupt() that port.c calls from vTaskStartScheduler.
     ${S32Z2_FREERTOS_SOURCE_DIR}/generic_timer.c
@@ -414,7 +428,7 @@ set_source_files_properties(${S32Z2_FREERTOS_SOURCE_DIR}/generic_timer.c
 # port.c on the S32DS branch so the dispatcher uses R52VtabeRefArray and finds
 # xPortSysTickHandler. (This also places its handlers in .systeminit, which the
 # linker script maps, instead of an orphan .handlers section.)
-set_source_files_properties(${S32Z2_FREERTOS_PORT_DIR}/port.c
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/vendor_patched/port.c
     PROPERTIES COMPILE_DEFINITIONS "_S32DS_FREERTOS_=1")
 
 # common/'s `#include <pthread.h>` is resolved by the hand-rolled shim at
