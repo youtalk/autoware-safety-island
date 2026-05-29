@@ -14,6 +14,15 @@
 #include "Linflexd_Uart_Ip.h"
 #include "Linflexd_Uart_Ip_VS_0_PBcfg.h"
 
+// S32CT-generated pin-mux table. NUM_OF_CONFIGURED_PINS comes from the board
+// Siul2_Port_Ip_Cfg.h; g_pin_mux_InitConfigArr_VS_0 (the actual pad settings)
+// from the generated PB cfg. This table muxes the NETC ETH0 RGMII pins
+// (SIUL2_1[58..65] -> ALT1 = ETH_0_RGMII_TXD/RXD/TXC/TXCTL/RXCTL/RX_CLK) plus
+// the PHY GPIO control pins. The lwip example applies it via Port_Init(); we
+// apply it directly with Siul2_Port_Ip_Init() (see board_init()).
+#include "Siul2_Port_Ip_Cfg.h"
+#include "Siul2_Port_Ip_VS_0_PBcfg.h"
+
 // AUTOSAR Mcu_Init / Port_Init / Platform_Init would require Mcu_Cfg.c /
 // Port_Cfg.c / Platform_Cfg.c — those PB configs are absent from the lwip
 // S32CT example (Components view does not instantiate them), so the build
@@ -69,6 +78,11 @@ int uart9_tx_byte(uint8_t b) {
 int board_init(void) {
     (void)Clock_Ip_Init(&Mcu_aClockConfigPB[0U]);
     uart9_init_115200_8N1();
+    // Mux the NETC ETH0 RGMII + PHY-control pins. Without this the MAC<->PHY
+    // RGMII pins stay at their reset function and the Ethernet wire interface is
+    // dead in BOTH directions (no TX on the wire, no RX) -- the lwip example
+    // does this inside Port_Init(), which the board otherwise skips.
+    (void)Siul2_Port_Ip_Init(NUM_OF_CONFIGURED_PINS, g_pin_mux_InitConfigArr_VS_0);
     return 0;
 }
 

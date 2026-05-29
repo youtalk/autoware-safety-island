@@ -468,13 +468,42 @@ target_sources(actuation_freertos_s32z2 PRIVATE
 
 # ---- NXP NETC <-> lwIP glue (eth_port.c) and RTD NETC driver ----
 target_sources(actuation_freertos_s32z2 PRIVATE
-    ${LWIP_PATH}/code/ports/netif/ethif/rtd/generic/eth_port.c
+    # VENDORED+PATCHED eth_port.c (NOT the LWIP_PATH copy): the upstream STD_OFF
+    # (poll) path was never exercised and had 3 bugs (RX ring seeded only in
+    # STD_ON; a poll-thread spawn guard that can never be true; a stray brace in
+    # the STD_OFF Tcpip_TxConfirmation). See the [actuation patch #N] markers.
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor_patched/eth_port.c
+    # Bridges the driver's AUTOSAR EthIf upper-layer callbacks
+    # (EthIf_RxIndication/EthIf_TxConfirmation) to eth_port.c's Tcpip_*
+    # functions, and supplies OsIf_TimeDelay for the poll thread. We build no
+    # EthIf.c and S32CT generates none.
+    ${CMAKE_CURRENT_SOURCE_DIR}/ethif_shim.c
 )
+# Run NETC RX completion in POLL mode (STD_OFF) CONSISTENTLY across the whole
+# build (the RTD driver AND eth_port.c). Both the driver's Eth_43_NETC_Cfg.h and
+# the post-build Eth_43_NETC_VS_0_PBcfg.h #ifndef-guard this macro, so a single
+# command-line define wins everywhere. This is the RTD's supported polling
+# configuration: ethif_poll_thread calls Eth_Receive() which drains the BD ring
+# and reports frames via EthIf_RxIndication -- no RX MSI-X IRQ, so no R52
+# GIC/MRU plumbing and no RX-ISR FPU-corruption wall.
+#
+# The generated PB config (Netc_Eth_Ip_VS_0_PBcfg.c) was produced with
+# EthCtrlEnableRxInterrupt=true, so its RX ring-config struct still names
+# Eth_43_NETC_RxIrqCallback in a (never-invoked, poll-mode) function pointer.
+# We satisfy that link reference with a no-op stub in ethif_shim.c rather than
+# regenerate the config.
+add_compile_definitions(ETH_43_NETC_RX_IRQ_ENABLED=STD_OFF)
 target_include_directories(actuation_freertos_s32z2 PRIVATE
     ${LWIP_PATH}/code/ports/netif/ethif/rtd/generic
 )
 file(GLOB _netc_sources
     ${S32_RTD_PATH}/RTD/Eth_43_NETC_TS_T31D53M20I1R0/src/*.c
+    # EthSwt_43_NETC (EthSwt_43_NETC.c, EthSwt_43_NETC_Ipw.c, Netc_EthSwt_Ip.c):
+    # the S32Z2 NETC sits behind an integrated switch. device_init() runs
+    # EthSwt_43_NETC_Init() before Eth_43_NETC_Init(); lwip_bringup.c now does
+    # the same, so the switch driver must be compiled in. Its PB config
+    # (EthSwt_43_NETC_VS_0_PBcfg.c) comes from the S32CT generate/src glob.
+    ${S32_RTD_PATH}/RTD/EthSwt_43_NETC_TS_T31D53M20I1R0/src/*.c
 )
 target_sources(actuation_freertos_s32z2 PRIVATE ${_netc_sources})
 

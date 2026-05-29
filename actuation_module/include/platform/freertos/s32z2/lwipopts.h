@@ -19,6 +19,13 @@
 #define TCPIP_THREAD_STACKSIZE          8192
 #define TCPIP_THREAD_PRIO               (12)   /* configMAX_PRIORITIES - 3 */
 #define DEFAULT_THREAD_STACKSIZE        4096
+// Priority of the NETC RX poll thread (eth_port.c ethif_poll_thread) created
+// with sys_thread_new(..., DEFAULT_THREAD_PRIO). lwIP's opt.h defaults this to
+// 1, which would tie it with the DDS/controller pthreads (tskIDLE_PRIORITY+1)
+// and let them block RX servicing. Place it just above the tcpip thread (12) so
+// it is never starved while draining the RX ring; it sleeps one tick per sweep
+// (OsIf_TimeDelay(1)), so the tcpip thread still gets the CPU to process frames.
+#define DEFAULT_THREAD_PRIO             (13)
 
 // Mailbox depths. lwIP's opt.h defaults these to 0, and NXP's sys_arch.c
 // sys_mbox_new() spins forever (`b .`) when asked for a size <= 0 — so with

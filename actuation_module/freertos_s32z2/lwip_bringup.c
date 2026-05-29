@@ -19,6 +19,19 @@
 
 #include "platform/freertos/s32z2/lwip_init.h"
 
+// NETC controller bring-up. The NXP RTD lwIP port (eth_port.c::
+// ethif_low_level_init) only calls Eth_ProvideRxBuffer + Eth_SetControllerMode
+// (ACTIVE); it ASSUMES the application has already run Eth_43_NETC_Init to set
+// up the Station Interface, RX/TX BD rings, and MAC — exactly what NXP's
+// device.c::device_init() does before bringing up lwIP. Our board_init() never
+// did this, so the RX ring stayed empty and the board received zero frames.
+// We invoke the minimal init subset here (poll mode needs no Platform/MRU IRQ
+// plumbing): OsIf for the driver's timeout loops, the integrated switch, then
+// the controller. PRECOMPILE_SUPPORT=STD_ON so each takes NULL_PTR.
+#include "OsIf.h"
+#include "EthSwt_43_NETC.h"
+#include "Eth_43_NETC.h"
+
 // Static-IP fallback used when no DHCP lease arrives (e.g. a link with no DHCP
 // server, like the bench). Lets the controller + DDS still come up. Overridable
 // at build time via -D. Board is .105/24; the gateway points at the bench host
@@ -64,6 +77,17 @@ int lwip_bring_up_blocking(void) {
         printf("lwip: tcpip_init timed out\n");
         return -2;
     }
+
+    // Initialise the NETC controller BEFORE netif_add() (netif_add ->
+    // ethif_ethernetif_init -> ethif_low_level_init, which only sets the
+    // controller ACTIVE and assumes the BD rings/SI/MAC are already configured).
+    // Runs in this task's thread context so the driver's OsIf timeout loops have
+    // a live tick. Eth_T_EnableIRQs() is deliberately omitted: poll mode services
+    // RX from a thread, avoiding the RX-ISR FPU-corruption and GIC/MRU walls.
+    printf("lwip: initialising NETC controller...\n");
+    OsIf_Init(NULL_PTR);
+    EthSwt_43_NETC_Init(NULL_PTR);
+    Eth_43_NETC_Init(NULL_PTR);
 
     ip4_addr_t ipaddr = {0}, netmask = {0}, gw = {0};
     if (netif_add(&s_netif, &ipaddr, &netmask, &gw, NULL,
