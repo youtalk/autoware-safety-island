@@ -62,7 +62,7 @@ int main(void) {
     
     // Create publishers for all message types
     auto steering_publisher = node.create_publisher<SteeringReportMsg>("/vehicle/status/steering_status", &autoware_vehicle_msgs_msg_SteeringReport_desc);
-    // auto trajectory_publisher = node.create_publisher<TrajectoryMsg>("/planning/scenario_planning/trajectory", &autoware_planning_msgs_msg_Trajectory_desc);
+    auto trajectory_publisher = node.create_publisher<TrajectoryMsg>("/planning/scenario_planning/trajectory", &autoware_planning_msgs_msg_Trajectory_desc);
     auto odometry_publisher = node.create_publisher<OdometryMsg>("/localization/kinematic_state", &nav_msgs_msg_Odometry_desc);
     auto acceleration_publisher = node.create_publisher<AccelerationMsg>("/localization/acceleration", &geometry_msgs_msg_AccelWithCovarianceStamped_desc);
     auto operation_mode_publisher = node.create_publisher<OperationModeStateMsg>("/system/operation_mode/state", &autoware_adapi_v1_msgs_msg_OperationModeState_desc);
@@ -84,25 +84,44 @@ int main(void) {
         steering_publisher->publish(steering_msg);
         log_info("Published steering report: angle=%.2f\n", steering_msg.steering_tire_angle);
 
-        // Publish Trajectory message
-        // TrajectoryMsg trajectory_msg;
-        // trajectory_msg.header.stamp = current_time;
-        // trajectory_msg.header.frame_id = "map";
-        // // Initialize trajectory points (simplified - just 3 points)
-        // trajectory_msg.points._length = 3;
-        // trajectory_msg.points._maximum = 3;
-        // trajectory_msg.points._buffer = new autoware_planning_msgs_msg_TrajectoryPoint[3];
-        // for (int i = 0; i < 3; i++) {
-        //     trajectory_msg.points._buffer[i].pose.position.x = i * 10.0;
-        //     trajectory_msg.points._buffer[i].pose.position.y = i * 5.0;
-        //     trajectory_msg.points._buffer[i].pose.position.z = 0.0;
-        //     trajectory_msg.points._buffer[i].longitudinal_velocity_mps = 10.0;
-        //     trajectory_msg.points._buffer[i].lateral_velocity_mps = 0.0;
-        //     trajectory_msg.points._buffer[i].acceleration_mps2 = 1.0;
-        // }
-        // trajectory_publisher->publish(trajectory_msg);
-        // log_info("Published trajectory with %d points\n", trajectory_msg.points._length);
-        // delete[] trajectory_msg.points._buffer;
+        // Publish Trajectory message: a straight path along +x starting near the
+        // vehicle's odometry pose (x=10, y=20) at a constant 5 m/s, so the MPC has
+        // a solvable path (>=3 points, identity orientation = yaw 0 facing +x,
+        // time_from_start increasing). Value-initialize so unset members (string
+        // pointers, covariances) are zero, not garbage that crashes serialization.
+        // Keep the whole trajectory in ONE UDP datagram (< CycloneDDS
+        // max_msg_size 1400 B): each TrajectoryPoint is ~88 B, so 10 points
+        // (~920 B) avoids DDS fragmentation, which otherwise congests the board's
+        // poll-mode RX ring and starves the small input topics.
+        constexpr uint32_t TRAJ_POINTS = 10;
+        constexpr double TRAJ_SPACING_M = 8.0;     // distance between points (80 m path)
+        constexpr float  TRAJ_SPEED_MPS = 5.0f;    // matches published odometry vx
+        TrajectoryMsg trajectory_msg{};
+        trajectory_msg.header.stamp = current_time;
+        trajectory_msg.header.frame_id = "map";
+        trajectory_msg.points._length = TRAJ_POINTS;
+        trajectory_msg.points._maximum = TRAJ_POINTS;
+        trajectory_msg.points._release = false;
+        trajectory_msg.points._buffer = new autoware_planning_msgs_msg_TrajectoryPoint[TRAJ_POINTS]();
+        for (uint32_t i = 0; i < TRAJ_POINTS; ++i) {
+            auto & pt = trajectory_msg.points._buffer[i];
+            pt.pose.position.x = 10.0 + i * TRAJ_SPACING_M;
+            pt.pose.position.y = 20.0;
+            pt.pose.position.z = 0.0;
+            pt.pose.orientation.x = 0.0;
+            pt.pose.orientation.y = 0.0;
+            pt.pose.orientation.z = 0.0;
+            pt.pose.orientation.w = 1.0;           // identity: heading along +x
+            pt.longitudinal_velocity_mps = TRAJ_SPEED_MPS;
+            pt.lateral_velocity_mps = 0.0f;
+            pt.acceleration_mps2 = 0.0f;
+            const double t_s = (i * TRAJ_SPACING_M) / TRAJ_SPEED_MPS;
+            pt.time_from_start.sec = (int32_t)t_s;
+            pt.time_from_start.nanosec = (uint32_t)((t_s - (int32_t)t_s) * 1e9);
+        }
+        trajectory_publisher->publish(trajectory_msg);
+        log_info("Published trajectory with %u points\n", trajectory_msg.points._length);
+        delete[] trajectory_msg.points._buffer;
 
         // Publish Odometry message (child_frame_id left NULL via value-init)
         OdometryMsg odometry_msg{};
