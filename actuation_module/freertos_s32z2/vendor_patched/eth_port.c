@@ -484,6 +484,17 @@ static err_t ethif_input(struct netif *netif, uint8_t * data, uint16_t size)
 
         struct pbuf* p = pbuf_alloced_custom(PBUF_RAW, size, PBUF_REF, ethif_pbuf, data, size);
 
+        /* [actuation patch #6] Poll mode (STD_OFF) must set if_idx + rx_buf, just
+           like the STD_ON branch above: ethif_pbuf_free_custom() reads exactly
+           these (pc->pbuf.if_idx, pc->pbuf.rx_buf) to hand the RX buffer back to
+           the driver via Eth_43_NETC_ProvideRxBuffer when the pbuf is freed.
+           Upstream left them unset here, so freed RX pbufs returned a garbage
+           buffer pointer -> the RX ring was never replenished and stalled after
+           the initial ETH_RXBD_NUM buffers were consumed (RBPIR stuck, RBDCR
+           climbing, RX dead after ~16 frames). */
+        p->if_idx = netif_get_index(netif);
+        p->rx_buf = data;
+
         if (ERR_OK != netif->input(p, netif))
         {
             LWIP_DEBUGF(NETIF_DEBUG, ("ethif_input: IP input error\n"));
