@@ -20,7 +20,22 @@ using OperationModeStateMsg = autoware_adapi_v1_msgs_msg_OperationModeState;
 static K_THREAD_STACK_DEFINE(node_stack, CONFIG_THREAD_STACK_SIZE);
 #define STACK_SIZE (K_THREAD_STACK_SIZEOF(node_stack))
 
-#define PUBLISH_PERIOD_MS (2000)
+#include <ctime>
+#include <cerrno>
+
+#define PUBLISH_PERIOD_MS (100)  // 10 Hz — realistic input cadence for the controller
+
+// EINTR-safe millisecond sleep. The FreeRTOS POSIX port delivers a ~1 kHz
+// tick signal that interrupts libc sleep()/usleep(), making them return early
+// (so the publish loop floods the bus). nanosleep reports the unslept
+// remainder, so we resume until the full interval has elapsed.
+static void sleep_ms(long ms)
+{
+    struct timespec req{ ms / 1000, (ms % 1000) * 1000000L };
+    while (nanosleep(&req, &req) == -1 && errno == EINTR) {
+        // resume with the remaining time written back into req
+    }
+}
 
 /*
     This test is used to test the DDS communication between ROS2 and Zephyr
@@ -60,7 +75,10 @@ int main(void) {
         auto current_time = Clock::toRosTime(Clock::now());
         
         // Publish SteeringReport message
-        SteeringReportMsg steering_msg;
+        // Value-initialize so any string members start as NULL (the CDR writer
+        // serializes NULL as an empty string); an uninitialized char* member is
+        // a garbage pointer that crashes strlen() during serialization.
+        SteeringReportMsg steering_msg{};
         steering_msg.stamp = current_time;
         steering_msg.steering_tire_angle = 0.5; // radians
         steering_publisher->publish(steering_msg);
@@ -86,8 +104,8 @@ int main(void) {
         // log_info("Published trajectory with %d points\n", trajectory_msg.points._length);
         // delete[] trajectory_msg.points._buffer;
 
-        // Publish Odometry message
-        OdometryMsg odometry_msg;
+        // Publish Odometry message (child_frame_id left NULL via value-init)
+        OdometryMsg odometry_msg{};
         odometry_msg.header.stamp = current_time;
         odometry_msg.header.frame_id = "odom";
         odometry_msg.pose.pose.position.x = 10.0;
@@ -102,7 +120,7 @@ int main(void) {
                  odometry_msg.twist.twist.linear.x, odometry_msg.twist.twist.linear.y, odometry_msg.twist.twist.linear.z);
 
         // Publish Acceleration message
-        AccelerationMsg acceleration_msg;
+        AccelerationMsg acceleration_msg{};
         acceleration_msg.header.stamp = current_time;
         acceleration_msg.header.frame_id = "base_link";
         acceleration_msg.accel.accel.linear.x = 2.0;
@@ -117,7 +135,7 @@ int main(void) {
                  acceleration_msg.accel.accel.angular.x, acceleration_msg.accel.accel.angular.y, acceleration_msg.accel.accel.angular.z);
 
         // Publish OperationModeState message
-        OperationModeStateMsg operation_mode_msg;
+        OperationModeStateMsg operation_mode_msg{};
         operation_mode_msg.stamp = current_time;
         operation_mode_msg.mode = 1; // Some mode value
         operation_mode_msg.is_autoware_control_enabled = true;
@@ -127,7 +145,7 @@ int main(void) {
                  operation_mode_msg.mode, operation_mode_msg.is_autoware_control_enabled, operation_mode_msg.is_in_transition);
 
         log_info("--------------------------------\n");
-        sleep(PUBLISH_PERIOD_MS / 1000);
+        sleep_ms(PUBLISH_PERIOD_MS);
     }
 
     return 0;
