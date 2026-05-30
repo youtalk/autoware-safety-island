@@ -190,6 +190,16 @@
 
 struct netif * g_netif[ETH_INSTANCE_COUNT] = { NULL };
 
+/* actuation HW-debug (s8): SAFE volatile counters, read via gdb from RAM — NO stdio
+   (s7 fprintf-from-poll-thread perturbed the board). Localise the "one discovery
+   burst then DDS-silent" hang. Pair with existing Tcpip_RxIndications[0] /
+   Tcpip_TxConfirmations[0]. */
+volatile uint32 g_poll_iters     = 0;  /* ethif_poll_thread while(1) sweeps */
+volatile uint32 g_eth_recv_calls = 0;  /* Eth_Receive() invocations */
+volatile uint32 g_eth_recv_got   = 0;  /* Eth_Receive() calls that returned a frame */
+volatile uint32 g_txsend_calls   = 0;  /* Eth_43_NETC_SendFrame() attempts (poll-mode TX) */
+volatile uint32 g_txsend_busy    = 0;  /* SendFrame returned BUFREQ_E_BUSY (ring full) */
+
 
 #if !NO_SYS
 struct pbuf dummy_char2;
@@ -418,43 +428,50 @@ static err_t ethif_low_level_output(struct netif *netif, struct pbuf *p)
         }
     }
 #else
-        /* [actuation patch #7] Poll-mode TX deadlock fix. The TX buffer
-           descriptors are reclaimed only by Eth_TxConfirmation() running in the
-           ethif_poll_thread. The original tight busy-wait below (no yield) starves
-           that thread whenever the sender is >= its priority: once DDS traffic
-           (control_cmd @ ~7 Hz + reliable-QoS acks) fills the ETH_TXBD_NUM ring,
-           Eth_43_NETC_SendFrame never returns BUFREQ_OK, the poll thread never runs
-           to reclaim, and the whole datapath deadlocks (RX dies too). Yield with
-           OsIf_TimeDelay(1) (== vTaskDelay, blocks so the lower/equal-prio poll
-           thread is scheduled and reclaims TX BDs) whenever the ring is momentarily
-           full. HW TX itself completes fine, so the ring always drains within a
-           tick or two and the send then succeeds. */
+        /* [actuation patch #8] Non-blocking poll-mode linkoutput -- supersedes
+           patch #7. lwIP calls linkoutput with the TCPIP core lock held
+           (LWIP_TCPIP_CORE_LOCKING=1). The old unbounded do{...OsIf_TimeDelay(1)}
+           while() retry AND the blocking sys_mbox_post() (which loops on
+           xQueueSend(...,10000), see sys_arch.c) both SLEEP while holding that lock
+           whenever the SI TX ring is full and not draining (HW TX completion /
+           TBCIR consumer index stalled). That parks the sender (CycloneDDS tev) on
+           the core mutex, so tcpip_thread can never reacquire it to drain RX -- the
+           whole RX datapath deadlocks (gdb-confirmed: tev blocked in
+           xQueueGenericSend under tcpip_send_msg_wait_sem). A netif linkoutput must
+           never block; UDP is lossy and DDS retransmits, so on a persistently full
+           ring we bound the retry and DROP the frame. */
+        uint8_t tx_attempts = 0U;
         do
         {
-        	sys_arch_protect();
+            sys_arch_protect();
             status = Eth_43_NETC_SendFrame(netif_cfg[netif->num]->num, 0, q->payload, &q->tot_len, &bufferIndex, TRUE);
+            ++g_txsend_calls;  /* actuation HW-debug */
             sys_arch_unprotect(0);
             if (BUFREQ_OK != status)
             {
-                OsIf_TimeDelay(1);   /* let ethif_poll_thread reclaim completed TX BDs */
+                ++g_txsend_busy;  /* actuation HW-debug */
+                ++tx_attempts;
             }
         }
-        while (BUFREQ_OK != status);
+        while ((BUFREQ_OK != status) && (tx_attempts < 8U));  /* bounded; never sleep under the core lock */
 
         if (BUFREQ_OK == status)
         {
-            /* [actuation patch #5] The in-flight reference is the up-front
-               pbuf_ref(p) taken before pbuf_coalesce() above (which also stops a
-               chained send from being double-freed). Do NOT pbuf_ref(q) again
-               here: that would leave a chained-send's coalesced buffer with a
-               stranded reference. ethif_poll_thread releases exactly this one
-               reference via its deferred pbuf_free() once the frame is sent. */
-            /* Post the pbuf to mbox, so that it will be checked for completion in ethif_poll_thread*/
-            sys_mbox_post((sys_mbox_t *)&in_flight_tx_pbufs, (void *)q);
+            /* [actuation patch #5/#8] in-flight ref = up-front pbuf_ref(p) consumed
+               into q; ethif_poll_thread frees it via Tcpip_TxConfirmation after HW
+               confirms. Enqueue NON-blocking -- sys_mbox_post()/sys_mbox_trypost()
+               both block on xQueueSend(...,10000), the very block that deadlocked RX,
+               so use sys_mbox_trypost_fromisr(). q is already in HW DMA (zero-copy);
+               if the mbox is momentarily full we neither free q (use-after-free) nor
+               block: q stays owned by HW, its TX BD is still reclaimed by
+               Eth_TxConfirmation, only its deferred pbuf_free is forfeited (a bounded
+               leak seen only while TX is HW-stalled, self-healing once TX recovers). */
+            (void)sys_mbox_trypost_fromisr((sys_mbox_t *)&in_flight_tx_pbufs, (void *)q);
         }
         else
         {
-            /* Decrement the ref (either p's ref in case it was a single pbuf, or the coalesed q's ref) */
+            /* Ring still full after the bounded retry: frame NOT accepted by HW
+               (BUFREQ busy) -- q is ours, free it and drop the frame. */
             (void)pbuf_free(q);
         }
 
@@ -556,6 +573,7 @@ static void ethif_poll_thread(void *arg)
 
     while (1)
     {
+        ++g_poll_iters;  /* actuation HW-debug: poll-thread heartbeat */
         /* Free any completed receive buffers */
         while (0 == sys_arch_mbox_tryfetch((sys_mbox_t *)&rx_buffs, (void**)&bd.data))
         {
@@ -569,6 +587,8 @@ static void ethif_poll_thread(void *arg)
 
 			Eth_TxConfirmation(instance);
 
+            ++g_eth_recv_calls;  /* actuation HW-debug */
+            if (ETH_NOT_RECEIVED != Status) { ++g_eth_recv_got; }
         } while (ETH_NOT_RECEIVED != Status);
 
         OsIf_TimeDelay(1);
@@ -692,6 +712,7 @@ static err_t ethif_low_level_output(struct netif *netif, struct pbuf *p)
         do
         {
             status = Eth_43_NETC_SendFrame(netif_cfg[netif->num]->num, 0, q->payload, &q->tot_len, &bufferIndex, TRUE);
+            ++g_txsend_calls;  /* actuation HW-debug */
 
         }
         while (BUFREQ_OK != status);
