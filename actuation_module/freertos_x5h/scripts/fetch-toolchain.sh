@@ -33,7 +33,11 @@ if [ ! -x "$BIN/arm-none-eabi-gcc" ]; then
   trap 'rm -rf "$TMPDIR"' EXIT
   echo "fetch-toolchain: downloading arm-gnu-toolchain-13.2.rel1 (~179 MB)..." >&2
   curl -fL -o "$TMPDIR/toolchain.tar.xz" "$TARBALL_URL"
-  echo "$TARBALL_SHA256  $TMPDIR/toolchain.tar.xz" | sha256sum -c - || {
+  # sha256sum -c writes its "<file>: OK" line to stdout (not stderr), which
+  # would otherwise corrupt the bin path this script prints on stdout for
+  # callers doing `toolchain_bin=$(fetch-toolchain.sh)` -- redirect it to
+  # stderr like every other diagnostic in this script.
+  echo "$TARBALL_SHA256  $TMPDIR/toolchain.tar.xz" | sha256sum -c - >&2 || {
     echo "ERROR: downloaded toolchain tarball does not match the pinned sha256 $TARBALL_SHA256." >&2
     exit 1
   }
