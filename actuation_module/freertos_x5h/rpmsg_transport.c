@@ -273,26 +273,47 @@ static void si_ept_unbind(struct rpmsg_endpoint *ept) {
 // LOCK_TCPIP_CORE starved tcpip_thread into a deadlock) that makes "equal to
 // tcpip_thread" a priority worth justifying, not assuming safe.
 //
-// It is safe here because of what this task actually does every cycle, not
-// because of where it sits in the ordering:
-//   - vTaskDelay(1000 ms): a real tick-driven sleep. It blocks THIS task, it
-//     does not hold the CPU, and it takes no lock first.
-//   - si_channel_format_hb(): pure, writes ~32-48 bytes into a stack buffer,
-//     no I/O, no lock.
-//   - rpmsg_trysend(): the non-blocking OpenAMP send (wait=false, same
-//     rationale as rpmsg_transport_send() below) -- it returns immediately
-//     whether or not the vring has room, it never waits for Linux to drain
-//     anything, and it never touches lwIP's core lock (LOCK_TCPIP_CORE is a
-//     concept in lwip_bringup.c/rpmsg_netif.c's tx path, not in the OpenAMP
-//     rpmsg layer this call goes through).
+// CORRECTED (a later review found the closing claim below false, the same
+// convention this file already uses for the two priority blocks further
+// down): this comment used to say rpmsg_trysend() here "never touches a lock
+// tcpip_thread needs". That is wrong. rpmsg_trysend() acquires rdev->lock
+// twice -- inside rpmsg_virtio_get_tx_payload_buffer() (rpmsg_virtio.c:383)
+// and again inside rpmsg_virtio_send_offchannel_nocopy() (:448) -- and
+// tcpip_thread's own tx path needs that SAME lock, via
+// rpmsg_transport_send() below calling rpmsg_trysend() too. LOCK_TCPIP_CORE
+// (lwIP's own lock, taken in lwip_bringup.c/rpmsg_netif.c's tx path) and
+// rdev->lock (OpenAMP's internal mutex) are two different locks; the old
+// clause about lwIP's core lock was true on its own narrow terms but let a
+// reader miss that a different lock IS shared here, which is the one that
+// actually matters for this pair of tasks.
+//
+// It is still safe, for three reasons this port's configuration gives us --
+// not because no lock is involved:
+//   1. With wait=false, rpmsg_virtio_get_tx_payload_buffer() sets
+//      tick_count = 0 (rpmsg_virtio.c:376-379) and its retry loop breaks
+//      after one attempt (:386) without ever reaching the
+//      metal_sleep_usec() at :395. So this task never sleeps while holding
+//      rdev->lock -- the hold is one non-blocking attempt, then release.
+//   2. Nothing in this tree uses the blocking wait=true path
+//      (rpmsg_transport_send()'s own comment below, rpmsg_transport.c:
+//      729-730, records that same choice for the eth channel), so
+//      rdev->lock is never held across a multi-second wait by any caller in
+//      this image.
+//   3. libmetal's __metal_mutex_init() backs rdev->lock with
+//      xSemaphoreCreateMutex() (freertos/mutex.h:41), which carries
+//      FreeRTOS priority inheritance. si_hb and tcpip_thread sit at equal
+//      priority (see above), so the only contention this pair can produce
+//      is one task briefly waiting for the other's bounded, non-sleeping
+//      critical section -- not a priority inversion, and not a deadlock.
 // So a full second of this task's own execution is one non-blocking send of
-// a few dozen bytes; there is nothing on this path that can hold the CPU
-// away from tcpip_thread for longer than that one send takes, and nothing
-// that can hold a lock tcpip_thread needs. Equal priority is therefore only
-// a scheduling-fairness question (round-robin between si_hb and tcpip_thread
-// when both are runnable), not a starvation one. If a future change adds a
-// blocking call or a lock acquisition to this task, that reasoning no longer
-// holds and the priority needs re-deriving, not just re-asserting.
+// a few dozen bytes, holding rdev->lock only across that one bounded
+// attempt; there is nothing on this path that can hold the CPU, or that
+// lock, away from tcpip_thread for longer than that one send takes. Equal
+// priority is therefore only a scheduling-fairness question (round-robin
+// between si_hb and tcpip_thread when both are runnable), not a starvation
+// or deadlock one. If a future change adds a blocking call (wait=true) or a
+// longer critical section to this task, all three reasons above need
+// re-checking, not just re-asserting.
 #define SI_HEARTBEAT_STACK_WORDS (configMINIMAL_STACK_SIZE * 2)
 #define SI_HEARTBEAT_PRIORITY    (RPMSG_POLL_TASK_PRIORITY - 1)
 
@@ -303,9 +324,22 @@ static void si_ept_unbind(struct rpmsg_endpoint *ept) {
 // path (rpmsg_poll_task and ept_unbind, both of which must keep draining the
 // vrings every tick); it says nothing about a dedicated 1 Hz task whose only
 // job is the delay itself, so this vTaskDelay() does not contradict it.
+//
+// Why the wire can stay quiet for a while after boot, restored here because
+// it explains something an operator will actually see: rpmsg_create_ept()
+// leaves s_si_ept.dest_addr at RPMSG_ADDR_ANY until Linux's rpmsg-si driver
+// sends this endpoint something (same mechanism ept_unbind()'s comment
+// block above documents for s_ept, and it applies again after any later
+// unbind). rpmsg_send_offchannel_raw() (rpmsg.c:126) rejects
+// dst == RPMSG_ADDR_ANY with RPMSG_ERR_PARAM before touching a vring, so
+// every heartbeat sent before Linux binds fails at that guard. This task
+// ignores rpmsg_trysend()'s return value (see the `if (n > 0)` below, which
+// only checks the FORMAT result), so that failure is deliberately unlogged.
+// This paragraph is what tells a board-session operator why the first N
+// heartbeats never reached Linux -- it is not a fault.
 static void si_heartbeat_task(void *pv) {
     (void)pv;
-    char line[48];
+    char line[SI_CHANNEL_HB_LINE_MAX];
     unsigned seq = 0;
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(1000));

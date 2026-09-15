@@ -582,14 +582,16 @@ target_sources(actuation_x5h PRIVATE
 )
 
 # actuation_x5h's own target_compile_options() blocks (below, in this same
-# file) do not enable -Wall/-Wextra, and rpmsg_netif_core_test (the host
-# test target in freertos/CMakeLists.txt) does -- these four files get the
-# same treatment here so this new code is held to that bar in-target too.
+# file) do not enable -Wall/-Wextra, and rpmsg_netif_core_test /
+# si_channel_test (the host test targets in freertos/CMakeLists.txt) do --
+# these five files get the same treatment here so this new code is held to
+# that bar in-target too.
 set_source_files_properties(
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_netif_core.c
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_netif.c
     ${CMAKE_CURRENT_LIST_DIR}/lwip_bringup.c
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_transport.c
+    ${CMAKE_CURRENT_LIST_DIR}/si_channel.c
     PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra"
 )
 
