@@ -296,7 +296,7 @@ static void si_ept_unbind(struct rpmsg_endpoint *ept) {
 //      rdev->lock -- the hold is one non-blocking attempt, then release.
 //   2. Nothing in this tree uses the blocking wait=true path
 //      (rpmsg_transport_send()'s own comment below, rpmsg_transport.c:
-//      729-730, records that same choice for the eth channel), so
+//      763-764, records that same choice for the eth channel), so
 //      rdev->lock is never held across a multi-second wait by any caller in
 //      this image.
 //   3. libmetal's __metal_mutex_init() backs rdev->lock with
@@ -366,6 +366,16 @@ int rpmsg_transport_si_init(void) {
     if (xTaskCreate(si_heartbeat_task, "si_hb", SI_HEARTBEAT_STACK_WORDS, NULL,
                     SI_HEARTBEAT_PRIORITY, &h) != pdPASS) {
         LPERROR("rpmsg-si heartbeat task creation failed\r\n");
+        // Deliberately not calling rpmsg_destroy_ept(&s_si_ept) here, on an
+        // endpoint that was just created and announced: rpmsg_destroy_ept()
+        // announces its NS DESTROY through OpenAMP's BLOCKING wait=true send
+        // path (documented above at :215-224, up to 15 s when the ring is
+        // full), run here on the bring-up caller's own stack, immediately
+        // before lwip_bringup.c's netif_add(). A 15-second bring-up stall
+        // would be strictly worse than leaving an advertised-but-quiet
+        // endpoint behind, especially since the caller
+        // (lwip_bringup.c:97-98) already logs this failure and continues --
+        // the network path does not depend on this endpoint at all.
         return -2;
     }
     LPRINTF("rpmsg-si endpoint created (addr=%u)\r\n", (unsigned)s_si_ept.addr);
@@ -756,6 +766,27 @@ int rpmsg_transport_init(void) {
     }
 
     LPRINTF("rpmsg-eth endpoint created (addr=%u)\r\n", (unsigned)s_ept.addr);
+
+    // Review finding (Important): the _Static_assert above only proves
+    // RPMSG_ETH_MAX_FRAME fits the COMPILE-TIME RPMSG_BUFFER_SIZE this port
+    // was written against. What actually governs the wire is the buffer size
+    // NEGOTIATED with the vring Linux publishes, which on a kernel without
+    // the 2048-byte rpmsg buffer patch is 512 B. rpmsg_virtio_send_offchannel_raw()
+    // silently truncates an oversized send to that negotiated size and still
+    // returns success, so a stock kernel would drop this branch's 1514-byte
+    // frames into malformed, truncated Ethernet frames on the Linux side with
+    // nothing on this console to show it -- tx_ok would keep climbing. Check,
+    // don't abort: a truncating link is still worth bringing up for
+    // diagnosis. rpmsg_virtio_get_tx_buffer_size() (openamp/rpmsg_virtio.h,
+    // pulled in transitively via <openamp/open_amp.h> above) is public
+    // OpenAMP API, not an internal header.
+    const int tx_cap = rpmsg_virtio_get_tx_buffer_size(s_rpdev);
+    if (tx_cap < (int)RPMSG_ETH_MAX_FRAME) {
+        LPERROR("rpmsg tx buffer is %d B, need %d -- is the 2048 kernel patch"
+                " applied? frames WILL be truncated\r\n",
+                tx_cap, (int)RPMSG_ETH_MAX_FRAME);
+    }
+
     return 0;
 }
 

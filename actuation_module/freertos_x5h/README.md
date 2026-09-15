@@ -86,9 +86,10 @@ Expected: `CONTRACT_PASS build/freertos-x5h/actuation_x5h.elf`. This script
 checks the ELF's LOAD segments, `.text` base address, and the
 `.resource_table` section's address, size, and byte-level vdev/vring
 contents — the facts a hardware flash decision depends on. It must not be
-modified; a failure here means the build produced a different memory layout,
-not that the script is wrong. `build.sh` runs it against both
-`actuation_x5h.elf` and `netif_only_x5h.elf` on every build.
+modified to make a failing build pass; it changes only when the contract
+itself moves (as in Task 2). A failure here usually means the build produced
+a different memory layout, not that the script is wrong. `build.sh` runs it
+against both `actuation_x5h.elf` and `netif_only_x5h.elf` on every build.
 
 ## Check the image budget
 
