@@ -141,6 +141,16 @@ jobs:
         shell: bash
         run: ./actuation_module/freertos_x5h/scripts/check-elf-contract.sh build/freertos-x5h/netif_only_x5h.elf rpmsg-eth
 
+      # Task 6: the checker's optional service-name argument takes exactly
+      # one name, so the second endpoint ("rpmsg-si") gets its own steps.
+      - name: Re-verify ELF contract (rpmsg-si) - actuation_x5h.elf
+        shell: bash
+        run: ./actuation_module/freertos_x5h/scripts/check-elf-contract.sh build/freertos-x5h/actuation_x5h.elf rpmsg-si
+
+      - name: Re-verify ELF contract (rpmsg-si) - netif_only_x5h.elf
+        shell: bash
+        run: ./actuation_module/freertos_x5h/scripts/check-elf-contract.sh build/freertos-x5h/netif_only_x5h.elf rpmsg-si
+
       - name: Re-verify image budget - actuation_x5h.elf
         shell: bash
         run: ./actuation_module/freertos_x5h/scripts/check-image-budget.sh build/freertos-x5h/actuation_x5h.elf
@@ -173,6 +183,16 @@ jobs:
       - name: Re-verify ELF contract - netif_only_x5h.elf (diag)
         shell: bash
         run: ./actuation_module/freertos_x5h/scripts/check-elf-contract.sh build/freertos-x5h-diag/netif_only_x5h.elf rpmsg-eth
+
+      # Task 6: the checker's optional service-name argument takes exactly
+      # one name, so the second endpoint ("rpmsg-si") gets its own steps.
+      - name: Re-verify ELF contract (rpmsg-si) - actuation_x5h.elf (diag)
+        shell: bash
+        run: ./actuation_module/freertos_x5h/scripts/check-elf-contract.sh build/freertos-x5h-diag/actuation_x5h.elf rpmsg-si
+
+      - name: Re-verify ELF contract (rpmsg-si) - netif_only_x5h.elf (diag)
+        shell: bash
+        run: ./actuation_module/freertos_x5h/scripts/check-elf-contract.sh build/freertos-x5h-diag/netif_only_x5h.elf rpmsg-si
 
       - name: Re-verify image budget - actuation_x5h.elf (diag)
         shell: bash

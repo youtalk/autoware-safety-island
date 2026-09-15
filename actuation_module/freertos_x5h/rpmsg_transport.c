@@ -31,6 +31,7 @@
 
 #include "rpmsg_netif.h"        /* rpmsg_netif_rx() -- our rx callback target */
 #include "rpmsg_netif_core.h"   /* RPMSG_ETH_SERVICE */
+#include "si_channel.h"         /* SI_CHANNEL_SERVICE, the rpmsg-si message logic */
 /* RPMSG_POLL_TASK_PRIORITY (moved there so freertos_main.cpp's ordering
    assertions and this file's xTaskCreate() share one definition), and
    TCPIP_THREAD_PRIO via the lwip/opt.h that header now includes -- which is
@@ -92,6 +93,8 @@ _Static_assert(RPMSG_ETH_MAX_FRAME <= RPMSG_BUFFER_SIZE - RPMSG_HDR_BYTES,
                "RPMSG_ETH_MAX_FRAME must fit within one RPMsg buffer after the header");
 
 static struct rpmsg_endpoint s_ept;
+static struct rpmsg_endpoint s_si_ept;
+static struct rpmsg_device *s_rpdev;   /* retained so rpmsg_transport_si_init can add endpoints later */
 static void *s_platform;
 
 // ---- rx path -- must never run from ISR context ----
@@ -236,6 +239,103 @@ static void ept_unbind(struct rpmsg_endpoint *ept) {
     (void)ept;
     LPERROR("rpmsg-eth endpoint unbound by remote;"
             " endpoint kept for re-bind\r\n");
+}
+
+// ---- rpmsg-si: second endpoint, heartbeat + fault latch ----
+//
+// A separate named endpoint on the SAME vdev s_rpdev already retained above
+// (rpmsg_transport_si_init() below requires rpmsg_transport_init() to have
+// returned 0 first, since that is the only path that sets s_rpdev). Message
+// parsing/formatting/the fault latch itself live in si_channel.c/.h, pure C
+// with no FreeRTOS or OpenAMP dependency so that logic is host-tested
+// (test/test_si_channel.c) -- this file only wires it to the transport.
+static int si_ept_cb(struct rpmsg_endpoint *ept, void *data, size_t len,
+                     uint32_t src, void *priv) {
+    (void)ept; (void)src; (void)priv;
+    const int before = si_channel_fault();
+    si_channel_rx(data, (unsigned)len);
+    if (si_channel_fault() != before) {
+        LPRINTF("SI_FAULT state=%s\r\n", si_channel_fault() ? "set" : "clear");
+    }
+    return RPMSG_SUCCESS;
+}
+
+static void si_ept_unbind(struct rpmsg_endpoint *ept) {
+    (void)ept;
+    LPERROR("rpmsg-si endpoint unbound by remote; endpoint kept for re-bind\r\n");
+}
+
+// Priority -- resolved, not guessed. RPMSG_POLL_TASK_PRIORITY is
+// TCPIP_THREAD_PRIO + 1 (rpmsg_transport.h), so RPMSG_POLL_TASK_PRIORITY - 1
+// lands this task at exactly TCPIP_THREAD_PRIO: EQUAL to the lwIP tcpip
+// thread, not strictly below it. Recorded explicitly because this codebase
+// has a documented multi-session incident (a `tev` thread sleeping under
+// LOCK_TCPIP_CORE starved tcpip_thread into a deadlock) that makes "equal to
+// tcpip_thread" a priority worth justifying, not assuming safe.
+//
+// It is safe here because of what this task actually does every cycle, not
+// because of where it sits in the ordering:
+//   - vTaskDelay(1000 ms): a real tick-driven sleep. It blocks THIS task, it
+//     does not hold the CPU, and it takes no lock first.
+//   - si_channel_format_hb(): pure, writes ~32-48 bytes into a stack buffer,
+//     no I/O, no lock.
+//   - rpmsg_trysend(): the non-blocking OpenAMP send (wait=false, same
+//     rationale as rpmsg_transport_send() below) -- it returns immediately
+//     whether or not the vring has room, it never waits for Linux to drain
+//     anything, and it never touches lwIP's core lock (LOCK_TCPIP_CORE is a
+//     concept in lwip_bringup.c/rpmsg_netif.c's tx path, not in the OpenAMP
+//     rpmsg layer this call goes through).
+// So a full second of this task's own execution is one non-blocking send of
+// a few dozen bytes; there is nothing on this path that can hold the CPU
+// away from tcpip_thread for longer than that one send takes, and nothing
+// that can hold a lock tcpip_thread needs. Equal priority is therefore only
+// a scheduling-fairness question (round-robin between si_hb and tcpip_thread
+// when both are runnable), not a starvation one. If a future change adds a
+// blocking call or a lock acquisition to this task, that reasoning no longer
+// holds and the priority needs re-deriving, not just re-asserting.
+#define SI_HEARTBEAT_STACK_WORDS (configMINIMAL_STACK_SIZE * 2)
+#define SI_HEARTBEAT_PRIORITY    (RPMSG_POLL_TASK_PRIORITY - 1)
+
+// This task's whole purpose is to sleep between sends -- unlike the
+// vTaskDelay() this file's top-of-file rule (see "No vTaskDelay() here"
+// above) was written about, which was an accidental stall hiding inside
+// LPRINTF() on the shared poll/unbind path. That rule is scoped to the POLL
+// path (rpmsg_poll_task and ept_unbind, both of which must keep draining the
+// vrings every tick); it says nothing about a dedicated 1 Hz task whose only
+// job is the delay itself, so this vTaskDelay() does not contradict it.
+static void si_heartbeat_task(void *pv) {
+    (void)pv;
+    char line[48];
+    unsigned seq = 0;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        const unsigned uptime_ms = (unsigned)(xTaskGetTickCount() * portTICK_PERIOD_MS);
+        const int n = si_channel_format_hb(line, sizeof line, seq++, uptime_ms, si_channel_fault());
+        if (n > 0) (void)rpmsg_trysend(&s_si_ept, line, n);
+    }
+}
+
+// Creates the "rpmsg-si" endpoint on the vdev rpmsg_transport_init() already
+// brought up, and starts the heartbeat task. Must be called after
+// rpmsg_transport_init() has returned 0 (s_rpdev is only set on that path);
+// see the null check below.
+int rpmsg_transport_si_init(void) {
+    if (!s_rpdev) return -1;
+    int ret = rpmsg_create_ept(&s_si_ept, s_rpdev, SI_CHANNEL_SERVICE,
+                               RPMSG_ADDR_ANY, RPMSG_ADDR_ANY,
+                               si_ept_cb, si_ept_unbind);
+    if (ret) {
+        LPERROR("rpmsg-si endpoint creation failed (%d)\r\n", ret);
+        return ret;
+    }
+    TaskHandle_t h = NULL;
+    if (xTaskCreate(si_heartbeat_task, "si_hb", SI_HEARTBEAT_STACK_WORDS, NULL,
+                    SI_HEARTBEAT_PRIORITY, &h) != pdPASS) {
+        LPERROR("rpmsg-si heartbeat task creation failed\r\n");
+        return -2;
+    }
+    LPRINTF("rpmsg-si endpoint created (addr=%u)\r\n", (unsigned)s_si_ept.addr);
+    return 0;
 }
 
 // ---- poll task ----
@@ -571,14 +671,14 @@ int rpmsg_transport_init(void) {
     // the blocking call below is preferable to failing transport init over
     // a diagnostics-only task.
 
-    struct rpmsg_device *rpdev = platform_create_rpmsg_vdev(
+    s_rpdev = platform_create_rpmsg_vdev(
         s_platform, 0, VIRTIO_DEV_DEVICE, NULL, NULL);
 
     if (heartbeat_handle) {
         vTaskDelete(heartbeat_handle);
     }
 
-    if (!rpdev) {
+    if (!s_rpdev) {
         LPERROR("platform_create_rpmsg_vdev failed\r\n");
         // Distinct code (Minor #5): platform_create_rpmsg_vdev() itself
         // returns a pointer, not an error code, so there is no underlying
@@ -587,12 +687,12 @@ int rpmsg_transport_init(void) {
         return -2;
     }
 
-    ret = rpmsg_create_ept(&s_ept, rpdev, RPMSG_ETH_SERVICE,
+    ret = rpmsg_create_ept(&s_ept, s_rpdev, RPMSG_ETH_SERVICE,
                             RPMSG_ADDR_ANY, RPMSG_ADDR_ANY,
                             ept_cb, ept_unbind);
     if (ret) {
         LPERROR("rpmsg_create_ept failed: %d\r\n", ret);
-        // Leak, unavoidable (Minor #5): rpdev's underlying
+        // Leak, unavoidable (Minor #5): s_rpdev's underlying
         // rpmsg_virtio_device (and the vdev/vring state
         // platform_create_rpmsg_vdev() allocated above) is not released on
         // this path. The vendor BSP's platform_release_rpmsg_vdev()

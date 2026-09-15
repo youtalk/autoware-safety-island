@@ -577,6 +577,8 @@ target_sources(actuation_x5h PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_netif.c
     ${CMAKE_CURRENT_LIST_DIR}/lwip_bringup.c
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_transport.c
+    # Task 6: second RPMsg channel "rpmsg-si" (heartbeat + fault latch).
+    ${CMAKE_CURRENT_LIST_DIR}/si_channel.c
 )
 
 # actuation_x5h's own target_compile_options() blocks (below, in this same
@@ -624,6 +626,8 @@ add_executable(netif_only_x5h
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_netif.c
     ${CMAKE_CURRENT_LIST_DIR}/lwip_bringup.c
     ${CMAKE_CURRENT_LIST_DIR}/rpmsg_transport.c
+    # Task 6: second RPMsg channel "rpmsg-si" (heartbeat + fault latch).
+    ${CMAKE_CURRENT_LIST_DIR}/si_channel.c
     ${lwipcore_SRCS}
     ${lwipcore4_SRCS}
     ${lwipapi_SRCS}
