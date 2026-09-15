@@ -16,9 +16,10 @@ channel.
 
 The ELF's memory layout is already frozen and verified by
 `scripts/check-elf-contract.sh`: `.text` at `0x11600000` (the Core1 `vram2`
-slot window) and `.resource_table` at `0x96650000` (the fixed remoteproc
-resource-table carveout Linux's remoteproc driver reads), both produced by
-the BSP's own unmodified linker scripts. This is deliberate: later tasks
+slot window, from the BSP's own unmodified linker script) and
+`.resource_table` at `0x5da00000` (the demo boot role's `cr52_ram1`
+carveout Linux's remoteproc driver reads, placed there by
+`vendor_patched/lscript_rsc_table_demo.ld`). This is deliberate: later tasks
 extend the same target rather than re-deriving the layout.
 
 ## Prerequisites
