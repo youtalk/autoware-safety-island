@@ -337,12 +337,28 @@ static void si_ept_unbind(struct rpmsg_endpoint *ept) {
 // only checks the FORMAT result), so that failure is deliberately unlogged.
 // This paragraph is what tells a board-session operator why the first N
 // heartbeats never reached Linux -- it is not a fault.
+// The wait below is an ABSOLUTE deadline, not a relative vTaskDelay().
+// Formatting the line and pushing it down the vring cost about 2.2 ms, and a
+// relative delay adds that to every period, so the heartbeat runs permanently
+// slow instead of jittering around 1 Hz.
+//
+// Gate D3 measured exactly that on board 2 on 2026-09-18: 1002.24 ms per
+// heartbeat by the firmware's own tick count, so a 600 s window received 597
+// heartbeats with ZERO sequence gaps and the gate's "n >= seconds - 2"
+// tolerance failed by one. The link was perfect; the period was not. The error
+// hides at short windows, which is why the gate runs for 10 minutes: 600
+// cycles times 2.2 ms is 1.3 heartbeats lost, plus one more at the window edge.
+//
+// vTaskDelayUntil() schedules on last_wake + period, so the work time is
+// absorbed rather than accumulated. If a cycle ever overruns its period the
+// call returns immediately and catches up, which is what a heartbeat should do.
 static void si_heartbeat_task(void *pv) {
     (void)pv;
     char line[SI_CHANNEL_HB_LINE_MAX];
     unsigned seq = 0;
+    TickType_t last_wake = xTaskGetTickCount();
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(1000));
         const unsigned uptime_ms = (unsigned)(xTaskGetTickCount() * portTICK_PERIOD_MS);
         const int n = si_channel_format_hb(line, sizeof line, seq++, uptime_ms, si_channel_fault());
         if (n > 0) (void)rpmsg_trysend(&s_si_ept, line, n);
