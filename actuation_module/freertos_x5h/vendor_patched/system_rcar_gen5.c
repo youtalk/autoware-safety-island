@@ -157,10 +157,27 @@ static void Init_MPU(void)
         } 
     } 
 
-    /* CES 2027 demo role: the resource table and the vrings Linux allocates
-     * for us live in cr52_ram1@5da00000 (2 MiB), outside every region in
-     * RCAR_MEMMORY_ARR. Same attribute as the vendor's shared-memory rows. */
-    if (MPU_SetRegion(REGION_RAM_NOCACHE_ATTR(0x5da00000u, 0x200000u))) {
+    /* CES 2027 demo role: the four carveouts cr52_1 lists all live here,
+     * outside every region in RCAR_MEMMORY_ARR. Same attribute as the
+     * vendor's shared-memory rows. One region covers all four:
+     *
+     *   0x5da00000 +0x200000  cr52_ram1, holding our .resource_table
+     *   0x5dc00000 +0x3000    vdev0vring0
+     *   0x5dc03000 +0x3000    vdev0vring1
+     *   0x5dc10000 +0x100000  vdev0buffer
+     *
+     * 4 MiB, not the 2 MiB this started as: the vrings and the rpmsg buffer
+     * pool sit above cr52_ram1, and Linux allocates them from those three
+     * carveouts only because openadkit's make-demo-dtb.sh names the device
+     * tree nodes vdev0vring0/1 and vdev0buffer. Without those names
+     * remoteproc allocated all three from linux,cma@40000000 -- an address no
+     * row of RCAR_MEMMORY_ARR maps, since the vendor table expects Linux CMA
+     * at LINUX_CMA_ADDRESS_0 (0xa2600000). That is what aborted this firmware
+     * in rpmsg_init_vdev at gate D1b on board 2, 2026-09-17. Keep this region
+     * and that script's layout in step: the resource table publishes
+     * FW_RSC_ADDR_ANY and takes back whatever addresses Linux writes into it,
+     * so a carveout outside this window is a data abort, not a diagnostic. */
+    if (MPU_SetRegion(REGION_RAM_NOCACHE_ATTR(0x5da00000u, 0x400000u))) {
 #if RAM_CONSOLE_ENABLE
         snprintf(ram_console + strlen(ram_console), sizeof(ram_console) - strlen(ram_console), "Set MPU region for the demo carveout FAIL. Exceeded number of MPU regions supported;");
 #endif
