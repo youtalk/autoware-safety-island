@@ -43,7 +43,6 @@ public:
   bool active() const { return active_; }
   bool armed() const { return armed_; }
   const char * reason() const { return reason_; }
-  double decel() const { return decel_; }
   // The commanded acceleration for as long as the override is active: -decel_
   // unconditionally, not gated on targetVelocity() -- the ramp can floor at 0
   // before the vehicle has physically stopped (brake lag, a grade, an

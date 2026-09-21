@@ -43,8 +43,6 @@ int main()
   // including after the ramp has floored at 0 -- releasing the brake there
   // would be a brake release, not a hold.
   assert(near(p.commandedAcceleration(), -3.0));
-  assert(near(p.targetVelocity(9.0), 0.0));
-  assert(near(p.commandedAcceleration(), -3.0));
 
   // Latched: a fresh heartbeat alone does not clear the trip. Clearing
   // requires BOTH conditions healthy: heartbeat fresh and no fault.

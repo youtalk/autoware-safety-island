@@ -317,14 +317,6 @@ static void si_ept_unbind(struct rpmsg_endpoint *ept) {
 #define SI_HEARTBEAT_STACK_WORDS (configMINIMAL_STACK_SIZE * 2)
 #define SI_HEARTBEAT_PRIORITY    (RPMSG_POLL_TASK_PRIORITY - 1)
 
-// This task's whole purpose is to sleep between sends -- unlike the
-// vTaskDelay() this file's top-of-file rule (see "No vTaskDelay() here"
-// above) was written about, which was an accidental stall hiding inside
-// LPRINTF() on the shared poll/unbind path. That rule is scoped to the POLL
-// path (rpmsg_poll_task and ept_unbind, both of which must keep draining the
-// vrings every tick); it says nothing about a dedicated 1 Hz task whose only
-// job is the delay itself, so this vTaskDelay() does not contradict it.
-//
 // Why the wire can stay quiet for a while after boot, restored here because
 // it explains something an operator will actually see: rpmsg_create_ept()
 // leaves s_si_ept.dest_addr at RPMSG_ADDR_ANY until Linux's rpmsg-si driver
