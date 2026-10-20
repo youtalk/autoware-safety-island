@@ -16,11 +16,35 @@ channel.
 
 The ELF's memory layout is already frozen and verified by
 `scripts/check-elf-contract.sh`: `.text` at `0x11600000` (the Core1 `vram2`
-slot window, from the BSP's own unmodified linker script) and
-`.resource_table` at `0x5da00000` (the demo boot role's `cr52_ram1`
-carveout Linux's remoteproc driver reads, placed there by
-`vendor_patched/lscript_rsc_table_demo.ld`). This is deliberate: later tasks
-extend the same target rather than re-deriving the layout.
+slot window) and `.resource_table` at `0x96650000` (the vendor `cr52_ram1`
+carveout that Linux's remoteproc driver reads), both produced by the BSP's
+own unmodified linker scripts. This is deliberate: later tasks extend the
+same target rather than re-deriving the layout.
+
+## DRAM the firmware uses
+
+The firmware runs from on-chip VRAM. Its only DRAM use is the resource table
+and three rpmsg windows that Linux allocates from named device tree
+carveouts. openadkit's `platforms/autosd/x5h/uboot/make-demo-dtb.sh` adds the
+three windows to the vendor cacr device tree.
+
+| Range | Device tree node | Holds |
+| --- | --- | --- |
+| `0x96400000`-`0x96403000` | `vdev0vring0` | rpmsg vring 0 |
+| `0x96403000`-`0x96406000` | `vdev0vring1` | rpmsg vring 1 |
+| `0x96410000`-`0x96510000` | `vdev0buffer` | rpmsg buffer pool |
+| `0x96650000`-`0x966A0000` | `cr52_ram1` (vendor, phandle `0x10a`) | `.resource_table` |
+
+All four sit inside the vendor MPU row `SHARE_CR_CA`
+(`0x8E600000`-`0x9E600000`, non-cacheable, in
+`common/memory_map/memory_map_x5h_ironhide.h`), so the vendor
+`system_rcar_gen5.c` maps them. A carveout outside that row is a data abort in
+`rpmsg_init_vdev`, not a diagnostic: the resource table publishes
+`FW_RSC_ADDR_ANY` and takes whatever address Linux writes into it.
+
+Flash the firmware and install the device tree in the same power cycle. Old
+firmware on this tree, or this firmware on an older tree, reads a resource
+table in memory that the tree gives to the NPU.
 
 ## Prerequisites
 
@@ -84,7 +108,7 @@ checks the ELF's LOAD segments, `.text` base address, and the
 `.resource_table` section's address, size, and byte-level vdev/vring
 contents — the facts a hardware flash decision depends on. It must not be
 modified to make a failing build pass; it changes only when the contract
-itself moves (as in Task 2). A failure here usually means the build produced
+itself moves. A failure here usually means the build produced
 a different memory layout, not that the script is wrong. `build.sh` runs it
 against both `actuation_x5h.elf` and `netif_only_x5h.elf` on every build.
 
