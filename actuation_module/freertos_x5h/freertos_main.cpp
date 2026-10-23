@@ -362,6 +362,7 @@ int main(void) {
 #else
     printf("FreeRTOS X5H actuation starting...\n");
 #endif
+    printf("X5H_SI_VERSION=" X5H_SI_VERSION "\n");
 
     TaskHandle_t task_handle = nullptr;
 #ifdef X5H_NETIF_ONLY
