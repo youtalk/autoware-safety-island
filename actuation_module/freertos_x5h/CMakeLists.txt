@@ -204,6 +204,14 @@ set_source_files_properties(
     PROPERTIES COMPILE_OPTIONS "-Wall;-Wextra"
 )
 
+# The version string of the boot banner (X5H_SI_VERSION=<v>). OTA tooling
+# matches it in the ELF and in the slot payload.
+file(STRINGS ${CMAKE_CURRENT_LIST_DIR}/VERSION X5H_SI_VERSION LIMIT_COUNT 1)
+if(NOT X5H_SI_VERSION MATCHES "^[A-Za-z0-9._-]+$")
+  message(FATAL_ERROR "VERSION must hold one version string, got '${X5H_SI_VERSION}'")
+endif()
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/VERSION)
+
 # ${CMAKE_CURRENT_LIST_DIR}/freertos_main.cpp, not a bare relative
 # "freertos_main.cpp": a plain include() (see the header comment above)
 # resolves relative source paths against CMAKE_CURRENT_SOURCE_DIR, which is
@@ -247,6 +255,7 @@ set_target_properties(actuation_x5h PROPERTIES
 # 1514-byte frame ceiling from it.
 target_compile_definitions(actuation_x5h PRIVATE
     PLATFORM_FREERTOS=1
+    X5H_SI_VERSION="${X5H_SI_VERSION}"
     PLATFORM_FREERTOS_X5H=1
     MFIS_CHAN=${MFIS_CHAN}
     RPMSG_BUFFER_SIZE=2048
@@ -629,6 +638,7 @@ set_target_properties(netif_only_x5h PROPERTIES
 
 target_compile_definitions(netif_only_x5h PRIVATE
     PLATFORM_FREERTOS=1
+    X5H_SI_VERSION="${X5H_SI_VERSION}"
     PLATFORM_FREERTOS_X5H=1
     MFIS_CHAN=${MFIS_CHAN}
     X5H_NETIF_ONLY=1
