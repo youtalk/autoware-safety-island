@@ -1,0 +1,21 @@
+/*
+ * Copyright (c) 2026, Arm Limited.
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The Corellium Cortex-R52 model (aem8r) has a LAN9220-family NIC: its stock
+ * Zephyr image uses the eth_smsc911x driver. The FVP BaseR devicetree keeps a
+ * disabled LAN91C111 at this address, and this overlay turns the node into
+ * the LAN9220.
+ */
+
+#include <zephyr/dt-bindings/interrupt-controller/arm-gic.h>
+
+&{/soc/ethernet@9a000000} {
+	compatible = "smsc,lan9220";
+	interrupts = <GIC_SPI 15 IRQ_TYPE_LEVEL IRQ_DEFAULT_PRIORITY>;
+	status = "okay";
+};
+
+&eth {
+	status = "disabled";
+};

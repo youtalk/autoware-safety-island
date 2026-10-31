@@ -42,8 +42,8 @@ CONTROL_CMD_OUTPUT_MODE=""
 # other than freertos-x5h does today) is behaviourally identical to it not
 # existing.
 EXTRA_CMAKE_ARGS=()
-RUNTIME_TARGET_LIST=("zephyr-fvp" "zephyr-s32z" "freertos-posix" "freertos-s32z2" "freertos-x5h")
-ZEPHYR_TARGET_LIST=("fvp_baser_aemv8r_smp" "s32z270dc2_rtu0_r52@D")
+RUNTIME_TARGET_LIST=("zephyr-fvp" "zephyr-fvp-aarch32" "zephyr-s32z" "freertos-posix" "freertos-s32z2" "freertos-x5h")
+ZEPHYR_TARGET_LIST=("fvp_baser_aemv8r_smp" "fvp_baser_aemv8r_aarch32" "s32z270dc2_rtu0_r52@D")
 ZEPHYR_TARGET=${ZEPHYR_TARGET_LIST[0]} # Default target is fvp_baser_aemv8r_smp
 ZEPHYR_TARGET_SET=0
 
@@ -52,7 +52,7 @@ function usage() {
   echo -e "------------------------------------------------"
   echo -e "${GREEN}    --platform         ${NC}Runtime target: ${RUNTIME_TARGET_LIST[*]}."
   echo -e "${GREEN}                         default: zephyr-fvp.${NC}"
-  echo -e "${GREEN}    --network          ${NC}Network profile: default, tap, twin. tap and twin are valid for zephyr-fvp."
+  echo -e "${GREEN}    --network          ${NC}Network profile: default, tap, twin. tap is valid for zephyr-fvp, twin for zephyr-fvp and zephyr-fvp-aarch32."
   echo -e "${GREEN}    --twin-ip          ${NC}Static IPv4 address and prefix, a.b.c.d/nn. Required with --network twin."
   echo -e "${GREEN}    --twin-peer        ${NC}The one static DDS peer, a.b.c.d. Required with --network twin."
   echo -e "${GREEN}    --dds-interface    ${NC}DDS interface/IP selector for FreeRTOS targets."
@@ -74,6 +74,7 @@ function usage() {
   echo ""
   echo -e "${GREEN}    Runtime target matrix:${NC}"
   echo -e "    zephyr-fvp       Zephyr on Arm FVP for local validation / AVH."
+  echo -e "    zephyr-fvp-aarch32  Zephyr on the 32-bit Arm FVP BaseR (Cortex-R52), such as the Corellium aem8r."
   echo -e "    zephyr-s32z      Zephyr on S32Z hardware."
   echo -e "    freertos-posix   FreeRTOS POSIX runtime for local validation."
   echo -e "    freertos-s32z2   FreeRTOS on S32Z2 hardware."
@@ -82,6 +83,7 @@ function usage() {
   echo -e "${GREEN}    Examples:${NC}"
   echo -e "    $0 --platform zephyr-fvp --network tap -d build/zephyr-fvp-tap"
   echo -e "    $0 --platform zephyr-fvp --network twin --twin-ip 10.11.1.5/24 --twin-peer 10.11.1.4"
+  echo -e "    $0 --platform zephyr-fvp-aarch32 --network twin --twin-ip 10.11.1.5/24 --twin-peer 10.11.1.4"
   echo -e "    $0 --platform freertos-posix -d build/freertos-posix --dds-interface wlp2s0 --control-output DDS_ONLY"
   echo -e "    $0 --platform freertos-s32z2 -d build/freertos-s32z2 --dds-interface 192.168.0.105"
   echo -e "    $0 --platform freertos-x5h -d build/freertos-x5h"
@@ -203,6 +205,8 @@ function normalize_platform() {
   if [ "${BUILD_PLATFORM_SET}" = "0" ] && [ "${ZEPHYR_TARGET_SET}" = "1" ]; then
     if [ "${ZEPHYR_TARGET}" = "fvp_baser_aemv8r_smp" ]; then
       BUILD_PLATFORM="zephyr-fvp"
+    elif [ "${ZEPHYR_TARGET}" = "fvp_baser_aemv8r_aarch32" ]; then
+      BUILD_PLATFORM="zephyr-fvp-aarch32"
     elif [ "${ZEPHYR_TARGET}" = "s32z270dc2_rtu0_r52@D" ]; then
       BUILD_PLATFORM="zephyr-s32z"
     fi
@@ -217,6 +221,16 @@ function normalize_platform() {
       ZEPHYR_TARGET="fvp_baser_aemv8r_smp"
       if [ "${BUILD_DIR_SET}" = "0" ]; then
         BUILD_DIR="build/zephyr-fvp"
+      fi
+      ;;
+    zephyr-fvp-aarch32)
+      if [ "${ZEPHYR_TARGET_SET}" = "1" ] && [ "${ZEPHYR_TARGET}" != "fvp_baser_aemv8r_aarch32" ]; then
+        echo -e "${RED}--platform zephyr-fvp-aarch32 conflicts with -t ${ZEPHYR_TARGET}${NC}" 1>&2
+        exit 1
+      fi
+      ZEPHYR_TARGET="fvp_baser_aemv8r_aarch32"
+      if [ "${BUILD_DIR_SET}" = "0" ]; then
+        BUILD_DIR="build/zephyr-fvp-aarch32"
       fi
       ;;
     zephyr-s32z)
@@ -270,8 +284,8 @@ function normalize_platform() {
   fi
 
   if [ "${NETWORK_PROFILE}" = "twin" ]; then
-    if [ "${BUILD_PLATFORM}" != "zephyr-fvp" ]; then
-      echo -e "${RED}--network twin is only valid for --platform zephyr-fvp${NC}" 1>&2
+    if [ "${BUILD_PLATFORM}" != "zephyr-fvp" ] && [ "${BUILD_PLATFORM}" != "zephyr-fvp-aarch32" ]; then
+      echo -e "${RED}--network twin is only valid for --platform zephyr-fvp or zephyr-fvp-aarch32${NC}" 1>&2
       exit 1
     fi
     local ipv4='([0-9]{1,3}\.){3}[0-9]{1,3}'
@@ -404,6 +418,11 @@ function build_zephyr_actuation_module() {
       "-DCONFIG_NET_IFACE1_GW=\"0.0.0.0\""
       "-DCONFIG_NET_CONFIG_PEER_IPV4_ADDR=\"${TWIN_PEER}\""
     )
+    # The aarch32 board has no fixed interface name for the LAN9220, so
+    # CycloneDDS selects the interface by its static address.
+    if [ "${target_base}" = "fvp_baser_aemv8r_aarch32" ]; then
+      build_args+=("-DCONFIG_DDS_NETWORK_INTERFACE=\"${TWIN_IP%/*}\"")
+    fi
   fi
 
   # Add device tree overlay only for ARM board variant
@@ -650,7 +669,7 @@ cd "${ROOT_DIR}"
 mkdir -p build
 
 case "${BUILD_PLATFORM}" in
-  zephyr-fvp|zephyr-s32z)
+  zephyr-fvp|zephyr-fvp-aarch32|zephyr-s32z)
     build_cyclonedds_host
     build_zephyr_actuation_module
     ;;
