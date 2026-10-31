@@ -31,6 +31,8 @@ BUILD_DIR_SET=0
 BUILD_PLATFORM="zephyr-fvp"
 BUILD_PLATFORM_SET=0
 NETWORK_PROFILE="default"
+TWIN_IP=""
+TWIN_PEER=""
 DDS_NETWORK_INTERFACE=""
 CONTROL_CMD_OUTPUT_MODE=""
 # Repeatable pass-through for ad hoc CMake cache entries (e.g. instrumented
@@ -50,7 +52,9 @@ function usage() {
   echo -e "------------------------------------------------"
   echo -e "${GREEN}    --platform         ${NC}Runtime target: ${RUNTIME_TARGET_LIST[*]}."
   echo -e "${GREEN}                         default: zephyr-fvp.${NC}"
-  echo -e "${GREEN}    --network          ${NC}Network profile: default, tap. tap is valid for zephyr-fvp."
+  echo -e "${GREEN}    --network          ${NC}Network profile: default, tap, twin. tap and twin are valid for zephyr-fvp."
+  echo -e "${GREEN}    --twin-ip          ${NC}Static IPv4 address and prefix, a.b.c.d/nn. Required with --network twin."
+  echo -e "${GREEN}    --twin-peer        ${NC}The one static DDS peer, a.b.c.d. Required with --network twin."
   echo -e "${GREEN}    --dds-interface    ${NC}DDS interface/IP selector for FreeRTOS targets."
   echo -e "${GREEN}    --control-output   ${NC}FreeRTOS control output: DDS_ONLY, CAN_ONLY, DDS_AND_CAN."
   echo -e "${GREEN}    --cmake-define     ${NC}Extra CMake cache entry KEY=VALUE, forwarded as -DKEY=VALUE."
@@ -77,6 +81,7 @@ function usage() {
   echo ""
   echo -e "${GREEN}    Examples:${NC}"
   echo -e "    $0 --platform zephyr-fvp --network tap -d build/zephyr-fvp-tap"
+  echo -e "    $0 --platform zephyr-fvp --network twin --twin-ip 10.11.1.5/24 --twin-peer 10.11.1.4"
   echo -e "    $0 --platform freertos-posix -d build/freertos-posix --dds-interface wlp2s0 --control-output DDS_ONLY"
   echo -e "    $0 --platform freertos-s32z2 -d build/freertos-s32z2 --dds-interface 192.168.0.105"
   echo -e "    $0 --platform freertos-x5h -d build/freertos-x5h"
@@ -121,6 +126,16 @@ function parse_args() {
       --network)
         require_arg "$1" "${2:-}"
         NETWORK_PROFILE="$2"
+        shift 2
+        ;;
+      --twin-ip)
+        require_arg "$1" "${2:-}"
+        TWIN_IP="$2"
+        shift 2
+        ;;
+      --twin-peer)
+        require_arg "$1" "${2:-}"
+        TWIN_PEER="$2"
         shift 2
         ;;
       --dds-interface)
@@ -248,10 +263,26 @@ function normalize_platform() {
       ;;
   esac
 
-  if [ "${NETWORK_PROFILE}" != "default" ] && [ "${NETWORK_PROFILE}" != "tap" ]; then
+  if [ "${NETWORK_PROFILE}" != "default" ] && [ "${NETWORK_PROFILE}" != "tap" ] && [ "${NETWORK_PROFILE}" != "twin" ]; then
     echo -e "${RED}Invalid network profile: ${NETWORK_PROFILE}${NC}" 1>&2
-    echo -e "${YELLOW}Valid network profiles: default tap${NC}" 1>&2
+    echo -e "${YELLOW}Valid network profiles: default tap twin${NC}" 1>&2
     exit 1
+  fi
+
+  if [ "${NETWORK_PROFILE}" = "twin" ]; then
+    if [ "${BUILD_PLATFORM}" != "zephyr-fvp" ]; then
+      echo -e "${RED}--network twin is only valid for --platform zephyr-fvp${NC}" 1>&2
+      exit 1
+    fi
+    local ipv4='([0-9]{1,3}\.){3}[0-9]{1,3}'
+    if ! [[ "${TWIN_IP}" =~ ^${ipv4}/([0-9]|[12][0-9]|3[0-2])$ ]]; then
+      echo -e "${RED}--network twin needs --twin-ip a.b.c.d/nn, got '${TWIN_IP}'${NC}" 1>&2
+      exit 1
+    fi
+    if ! [[ "${TWIN_PEER}" =~ ^${ipv4}$ ]]; then
+      echo -e "${RED}--network twin needs --twin-peer a.b.c.d, got '${TWIN_PEER}'${NC}" 1>&2
+      exit 1
+    fi
   fi
 
   if [ "${NETWORK_PROFILE}" = "tap" ] && [ "${BUILD_PLATFORM}" != "zephyr-fvp" ]; then
@@ -358,6 +389,21 @@ function build_zephyr_actuation_module() {
     extra_conf_files+=("${ROOT_DIR}/actuation_module/boards/fvp_baser_aemv8r_smp_tap_network.conf")
     local fvp_tap_interface="${FVP_TAP_INTERFACE:-tap0}"
     export ARMFVP_EXTRA_FLAGS="${ARMFVP_EXTRA_FLAGS:-} -C bp.hostbridge.userNetworking=0 -C bp.hostbridge.interfaceName=${fvp_tap_interface}"
+  fi
+
+  if [ "${NETWORK_PROFILE}" = "twin" ]; then
+    extra_conf_files+=("${ROOT_DIR}/actuation_module/boards/${target_base}_twin_network.conf")
+    local prefix="${TWIN_IP#*/}"
+    local mask=$(( (0xffffffff << (32 - prefix)) & 0xffffffff ))
+    local netmask="$(( mask >> 24 & 255 )).$(( mask >> 16 & 255 )).$(( mask >> 8 & 255 )).$(( mask & 255 ))"
+    # Kconfig string values need their quotes on the command line. The
+    # gateway 0.0.0.0 means none: the peer is on the same subnet.
+    build_args+=(
+      "-DCONFIG_NET_IFACE1_ADDR=\"${TWIN_IP%/*}\""
+      "-DCONFIG_NET_IFACE1_NETMASK=\"${netmask}\""
+      "-DCONFIG_NET_IFACE1_GW=\"0.0.0.0\""
+      "-DCONFIG_NET_CONFIG_PEER_IPV4_ADDR=\"${TWIN_PEER}\""
+    )
   fi
 
   # Add device tree overlay only for ARM board variant

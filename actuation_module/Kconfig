@@ -21,6 +21,13 @@ config DDS_NETWORK_INTERFACE
 	  When left undefined, CycloneDDS will automatically select an interface
 	  based on its own criteria.
 
+config DDS_DISABLE_MULTICAST
+	bool "Turn off SPDP multicast"
+	default n
+	help
+	  Turn off SPDP multicast. Discovery uses the static peer only
+	  (CONFIG_NET_CONFIG_PEER_IPV4_ADDR).
+
 config LOG_LEVEL
 	int "Log level for actuation module"
 	default 1
